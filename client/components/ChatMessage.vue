@@ -4,7 +4,7 @@
     variant="outlined"
     class="w-fit"
   >
-    <MDC :value="message.text" class="text-sm mdc" />
+    <MDC :value="message.text" class="text-sm mdc whitespace-pre-wrap" />
     <span class="text-xs opacity-60 mt-1 ml-auto block w-fit">{{ message.name }}</span>
   </Message>
 </template>

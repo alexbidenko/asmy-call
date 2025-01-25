@@ -1,12 +1,14 @@
 <template>
   <div class="h-full flex flex-col">
-    <div class="flex-1 flex flex-col justify-end gap-2 p-1">
-      <ChatMessage
-        v-for="(msg, i) in chatStore.messages"
-        :key="i"
-        :message="msg"
-        :class="{ 'ml-auto': msg.socketId === chatStore.socket?.id }"
-      />
+    <div class="flex-1 overflow-auto">
+      <div class="flex flex-col justify-end gap-2 p-1 min-h-full">
+        <ChatMessage
+          v-for="(msg, i) in chatStore.messages"
+          :key="i"
+          :message="msg"
+          :class="{ 'ml-auto': msg.socketId === chatStore.socket?.id }"
+        />
+      </div>
     </div>
 
     <Divider class="!m-0" />
