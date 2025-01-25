@@ -8,6 +8,7 @@ import { join } from 'path';
   imports: [
     ...(process.env.NODE_ENV === 'production' ? [
       ServeStaticModule.forRoot({
+        renderPath: '*',
         rootPath: join(__dirname, '..', 'client'),
       }),
     ] : []),
