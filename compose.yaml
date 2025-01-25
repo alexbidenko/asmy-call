@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   entrypoint:
-    image: ghcr.io/alexbidenko/asmy-call/server:latest
+    image: ghcr.io/alexbidenko/asmy-call/application:latest
     networks:
       - server
     deploy:
