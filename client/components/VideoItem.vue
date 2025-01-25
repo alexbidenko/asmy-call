@@ -4,7 +4,7 @@
     :class="{ 'rounded-sm aspect-video': !opened, 'h-full w-full': opened }"
   >
     <video
-      v-if="video"
+      v-show="video"
       :ref="(el) => videoRef(el as HTMLVideoElement)"
       @click="$emit('teleport', streamId)"
       autoplay
@@ -13,10 +13,15 @@
       class="bg-black h-full w-full object-contain object-center"
       v-bind="$attrs"
     />
-    <div v-else class="bg-surface-800 flex items-center justify-center h-full w-full">
+    <div v-if="!video" class="bg-surface-800 flex items-center justify-center h-full w-full">
       <Avatar :label="label" class="mr-2" size="xlarge" shape="circle" />
     </div>
-    <span class="absolute bottom-0 left-0 right-0 p-1 bg-surface-600/20 text-center text-sm">{{ username }}</span>
+    <span class="absolute bottom-0 left-0 right-0 bg-surface-600/20 text-center text-sm flex items-center h-8 gap-2 justify-center">
+      {{ username }}
+      <span v-if="!audio" class="material-icons-outlined text-red-500 !text-lg">
+        mic_off
+      </span>
+    </span>
   </div>
 </template>
 
@@ -26,6 +31,7 @@ const props = defineProps<{
   videoRef: (el: HTMLVideoElement) => void;
   username: string;
   video?: boolean;
+  audio?: boolean;
   opened?: boolean;
 }>()
 defineEmits<{

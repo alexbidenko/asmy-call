@@ -4,7 +4,11 @@
     <Button @click="userStore.initialized = true" label="Присоединиться" size="large" text />
   </div>
   <div v-else class="h-full flex flex-col">
-    <Splitter class="flex-1 !rounded-none overflow-hidden" state-storage="local" state-key="video-chat-splitter">
+    <Splitter
+      class="flex-1 !rounded-none overflow-hidden"
+      state-storage="local"
+      state-key="video-chat-splitter"
+    >
       <SplitterPanel :size="75" class="min-w-64">
         <VideoConference :room="userStore.room" />
       </SplitterPanel>

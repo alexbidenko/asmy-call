@@ -72,6 +72,16 @@
       </Button>
     </div>
 
+    <div v-if="interfaceStore.isLargeVideoVisible" class="flex gap-1 p-1 rounded-full bg-primary-400">
+      <Button @click="interfaceStore.isMembersVisible = !interfaceStore.isMembersVisible" rounded>
+        <template #icon>
+          <span class="material-icons-outlined">
+            {{ interfaceStore.isMembersVisible ? 'group' : 'group_off' }}
+          </span>
+        </template>
+      </Button>
+    </div>
+
     <div class="flex gap-1 p-1 rounded-full bg-primary-400">
       <Button @click="interfaceStore.isChatVisible = !interfaceStore.isChatVisible" rounded>
         <template #icon>

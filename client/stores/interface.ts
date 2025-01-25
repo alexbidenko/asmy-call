@@ -1,5 +1,13 @@
 export const useInterfaceStore = defineStore('interface', () => {
   const isChatVisible = ref(false);
 
-  return { isChatVisible };
+  const isMembersVisible = ref(true);
+
+  const isLargeVideoVisible = ref(false);
+
+  watch(isLargeVideoVisible, (v) => {
+    if (!v) isMembersVisible.value = true;
+  });
+
+  return { isChatVisible, isMembersVisible, isLargeVideoVisible };
 });

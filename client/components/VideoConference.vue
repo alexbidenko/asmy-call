@@ -3,6 +3,7 @@
     <div id="large-video-slot" class="empty:hidden flex-1" />
 
     <div
+      v-show="interfaceStore.isMembersVisible"
       class="grid grid-cols-1 gap-2 p-2 h-fit"
       :class="{
         '@xl:grid-cols-2 @4xl:grid-cols-3 @7xl:grid-cols-4 w-full': !teleportedId,
@@ -21,7 +22,8 @@
           stream-id="local-video"
           :opened="teleportedId === 'local-video'"
           :username="userStore.username"
-          :video="!!webrtcStore.localStream"
+          :video="!!webrtcStore.localStream?.getVideoTracks().length"
+          :audio="!!webrtcStore.localStream?.getAudioTracks().length"
         />
       </Teleport>
       <Teleport v-if="webrtcStore.screenStream" defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
@@ -43,7 +45,8 @@
           :muted="!webrtcStore.isOutputOn"
           :opened="teleportedId === `stream-${obj.id}`"
           :username="obj.username || 'Unknown'"
-          :video="!!obj.stream"
+          :video="!!obj.stream?.getVideoTracks().length"
+          :audio="!!obj.stream?.getAudioTracks().length"
         />
       </Teleport>
     </div>
@@ -61,6 +64,7 @@ const devicesStore = useDeviceStore()
 const webrtcStore = useWebrtcStore()
 const memberStore = useMemberStore()
 const userStore = useUserStore()
+const interfaceStore = useInterfaceStore()
 
 const teleportedId = ref('');
 
@@ -115,9 +119,15 @@ function setSink(el: HTMLVideoElement, sinkId: string) {
 watch([() => webrtcStore.localStream, () => webrtcStore.screenStream, () => webrtcStore.remoteStreams], () => {
   if (teleportedId.value === 'local-video' && !webrtcStore.localStream) teleportedId.value = '';
   else if (teleportedId.value === 'local-screen' && !webrtcStore.screenStream) teleportedId.value = '';
-  else if (teleportedId.value.startsWith('stream-') && !webrtcStore.remoteStreams.find((r) => `stream-${r.id}` === teleportedId.value))
-    teleportedId.value = '';
+  else if (
+    teleportedId.value.startsWith('stream-') &&
+    !webrtcStore.remoteStreams.find((r) => `stream-${r.id}` === teleportedId.value)
+  ) teleportedId.value = '';
 });
+
+watch(teleportedId, (v) => {
+  interfaceStore.isLargeVideoVisible = !!v;
+}, { immediate: true });
 
 onMounted(async () => {
   // Считываем сохранённые выборы устройств
