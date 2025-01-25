@@ -1,26 +1,29 @@
 import { defineStore } from 'pinia'
 import { io, Socket } from 'socket.io-client'
 
-interface ChatMessage {
+export interface ChatMessage {
   name: string
   text: string
+  socketId: string;
 }
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
     socket: null as Socket | null,
     messages: [] as ChatMessage[],
-    room: ''
+    room: '',
   }),
   actions: {
     initChat(room: string) {
+      const config = useRuntimeConfig();
+
       // Если уже есть сокет, почистим/переинициализируем
       if (this.socket) {
         this.socket.disconnect();
       }
       this.room = room
       this.messages = []
-      this.socket = io('http://localhost:4000', { forceNew: true })
+      this.socket = io(config.public.apiHost || '', { forceNew: true })
       this.socket.on('connect', () => {
         this.socket?.emit('joinRoom', { room })
       })

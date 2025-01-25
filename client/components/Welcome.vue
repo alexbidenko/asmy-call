@@ -16,6 +16,7 @@ const username = ref(userStore.username);
 
 const onSubmit = () => {
   userStore.username = username.value.trim();
+  userStore.initialized = true;
 
   if (!userStore.room) {
     const randomRoom = crypto.randomUUID();

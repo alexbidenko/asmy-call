@@ -53,13 +53,41 @@
         </template>
       </Button>
     </div>
+
+    <div class="flex gap-1 p-1 rounded-full" :class="webrtcStore.isScreenSharing ? 'bg-primary-600' : 'bg-primary-400'">
+      <Button @click="startShare" rounded>
+        <template #icon>
+          <span class="material-icons-outlined">
+            screen_share
+          </span>
+        </template>
+      </Button>
+
+      <Button v-if="webrtcStore.isScreenSharing" @click="stopShare" rounded>
+        <template #icon>
+          <span class="material-icons-outlined">
+            stop_screen_share
+          </span>
+        </template>
+      </Button>
+    </div>
+
+    <div class="flex gap-1 p-1 rounded-full bg-primary-400">
+      <Button @click="interfaceStore.isChatVisible = !interfaceStore.isChatVisible" rounded>
+        <template #icon>
+          <span class="material-icons-outlined">
+            chat
+          </span>
+        </template>
+      </Button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
 import type { MenuItem } from 'primevue/menuitem'
 
+const interfaceStore = useInterfaceStore()
 const webrtcStore = useWebrtcStore()
 const deviceStore = useDeviceStore()
 
@@ -70,7 +98,7 @@ const videoMenu = ref()
 /**
  * Выбираем новое устройство вывода -> обновляем sinkId у локального и всех remote video
  */
-function onOutputChange() {
+const onOutputChange = () => {
   if (webrtcStore.localVideo) {
     setSink(webrtcStore.localVideo, deviceStore.selectedAudioOutput)
   }
@@ -79,13 +107,11 @@ function onOutputChange() {
     if (videoEl) setSink(videoEl, deviceStore.selectedAudioOutput)
   })
   deviceStore.saveToStorage()
-}
+};
 
 // Настройка sinkId
 function setSink(el: HTMLVideoElement, sinkId: string) {
-  // @ts-expect-error
   if (typeof el.sinkId !== 'undefined' && sinkId !== 'default') {
-    // @ts-expect-error
     el.setSinkId(sinkId).catch((err) => {
       console.warn('Error setting sinkId:', err)
     })
@@ -132,5 +158,13 @@ function toggleMic() {
 
 function toggleCam() {
   webrtcStore.toggleCam(!webrtcStore.isCamOn)
+}
+
+// Шеринг экрана
+function startShare() {
+  webrtcStore.startScreenShare()
+}
+function stopShare() {
+  webrtcStore.stopScreenShare()
 }
 </script>

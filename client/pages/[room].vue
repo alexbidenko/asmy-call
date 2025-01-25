@@ -1,12 +1,17 @@
 <template>
   <Welcome v-if="!userStore.ready" />
-  <div v-else-if="!initialized" class="h-full flex justify-center items-center">
-    <Button @click="initialized = true" label="Присоединиться" size="large" text />
+  <div v-else-if="!userStore.initialized" class="h-full flex justify-center items-center">
+    <Button @click="userStore.initialized = true" label="Присоединиться" size="large" text />
   </div>
   <div v-else class="h-full flex flex-col">
-    <VideoConference :room="userStore.room" />
-    <hr />
-    <ChatBox :room="userStore.room" />
+    <Splitter class="flex-1 !rounded-none overflow-hidden" state-storage="local" state-key="video-chat-splitter">
+      <SplitterPanel :size="75" :min-size="20">
+        <VideoConference :room="userStore.room" />
+      </SplitterPanel>
+      <SplitterPanel v-if="interfaceStore.isChatVisible" :size="25" :min-size="20">
+        <ChatBox :room="userStore.room" />
+      </SplitterPanel>
+    </Splitter>
 
     <ControlPanel class="mt-auto" />
   </div>
@@ -14,6 +19,5 @@
 
 <script setup lang="ts">
 const userStore = useUserStore();
-
-const initialized = ref(false);
+const interfaceStore = useInterfaceStore();
 </script>

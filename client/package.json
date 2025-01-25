@@ -24,7 +24,9 @@
     "vue-router": "latest"
   },
   "devDependencies": {
+    "@nuxtjs/mdc": "^0.12.1",
     "@pinia/nuxt": "^0.9.0",
-    "@primevue/nuxt-module": "^4.2.5"
+    "@primevue/nuxt-module": "^4.2.5",
+    "nuxt-security": "^2.1.5"
   }
 }

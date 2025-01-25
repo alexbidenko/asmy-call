@@ -33,6 +33,7 @@ export class WebRtcGateway implements OnGatewayConnection, OnGatewayDisconnect {
         console.log(`[handleDisconnect] in room=${room}, removed client=${client.id}`);
         client.to(room).emit('user-left', { socketId: client.id });
       }
+      if (!after) delete this.rooms[room];
     }
   }
 

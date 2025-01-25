@@ -1,47 +1,46 @@
 <template>
-  <div>
-    <h3>Video Conference</h3>
+  <div class="@container flex h-full">
+    <div id="large-video-slot" class="empty:hidden flex-1" />
 
-    <!-- Показ "In Call" / "Not in Call" -->
-    <div v-if="webrtcStore.isInCall" style="color: green;">
-      Status: In Call
-    </div>
-    <div v-else style="color: red;">
-      Status: Not in Call
-    </div>
-
-    <!-- Локальное видео-превью -->
-    <video
-      :ref="(el) => (webrtcStore.localVideo = el as HTMLVideoElement)"
-      autoplay
-      playsinline
-      muted
-      style="width: 300px; background: #000; margin-right: 8px;"
-    ></video>
-
-    <!-- Удалённые видео -->
-    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-      <div v-for="obj in streams" :key="obj.id">
-        <video
-          :ref="(el) => setRemoteRef(el, obj.id)"
-          autoplay
-          playsinline
-          :muted="!webrtcStore.isOutputOn"
-          :class="{ hidden: !obj.stream.getVideoTracks().length }"
-          style="width: 300px; background: #000;"
+    <div class="flex flex-wrap gap-2 p-2 h-fit">
+      <!-- Локальное видео-превью -->
+      <Teleport
+        v-if="!webrtcStore.screenStream || webrtcStore.localStream"
+        defer to="#large-video-slot"
+        :disabled="teleportedId !== 'local-video'"
+      >
+        <VideoItem
+          @teleport="toggleTeleportId"
+          :video-ref="(el) => (webrtcStore.localVideo = el)"
+          stream-id="local-video"
+          :opened="teleportedId === 'local-video'"
+          :username="userStore.username"
+          :video="!!webrtcStore.localStream"
         />
-        {{ obj.stream.getVideoTracks()[0]?.enabled }}
-        {{ obj.username }}
-      </div>
-    </div>
+      </Teleport>
+      <Teleport v-if="webrtcStore.screenStream" defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
+        <VideoItem
+          @teleport="toggleTeleportId"
+          :video-ref="(el) => (webrtcStore.localScreen = el)"
+          stream-id="local-screen"
+          :opened="teleportedId === 'local-screen'"
+          :username="userStore.username"
+          video
+        />
+      </Teleport>
 
-    <!-- Кнопки шеринга экрана -->
-    <button @click="startShare" :disabled="webrtcStore.isScreenSharing">
-      Share Screen
-    </button>
-    <button @click="stopShare" :disabled="!webrtcStore.isScreenSharing">
-      Stop Share
-    </button>
+      <Teleport v-for="obj in streams" :key="obj.id" defer to="#large-video-slot" :disabled="teleportedId !== `stream-${obj.id}`">
+        <VideoItem
+          @teleport="toggleTeleportId"
+          :video-ref="(el) => setRemoteRef(el, obj.id)"
+          :stream-id="`stream-${obj.id}`"
+          :muted="!webrtcStore.isOutputOn"
+          :opened="teleportedId === `stream-${obj.id}`"
+          :username="obj.username || 'Unknown'"
+          :video="!!obj.stream"
+        />
+      </Teleport>
+    </div>
   </div>
 </template>
 
@@ -55,21 +54,35 @@ const props = defineProps<{ room: string }>()
 const devicesStore = useDeviceStore()
 const webrtcStore = useWebrtcStore()
 const memberStore = useMemberStore()
+const userStore = useUserStore()
+
+const teleportedId = ref('');
+
+const toggleTeleportId = (id: string) => {
+  teleportedId.value = teleportedId.value === id ? '' : id;
+}
 
 /**
  * Собираем список remoteStreams + username из memberStore
  */
 const streams = computed(() => {
-  const map = new Map<string, RemoteStreamObj & MemberType>()
+  const map = new Map<string, Partial<RemoteStreamObj & MemberType> & { id: string }>()
 
-  window.test = webrtcStore.remoteStreams;
+  memberStore.list.forEach((el) => {
+    map.set(el.id, {
+      ...el,
+      ...(webrtcStore.remoteStreams.find((r) => r.socketId === el.id) || {})
+    })
+  });
+
   webrtcStore.remoteStreams.forEach((el) => {
+    map.delete(el.socketId);
     map.set(el.id, {
       ...el,
       username:
         memberStore.list.find((m) => m.id === el.socketId)?.username || 'Unknown'
     })
-  })
+  });
 
   return [...map.values()]
 });
@@ -86,21 +99,11 @@ function setRemoteRef(el: HTMLVideoElement | null, streamId: string) {
 
 // Настройка аудиовыхода (sinkId)
 function setSink(el: HTMLVideoElement, sinkId: string) {
-  // @ts-expect-error
   if (typeof el.sinkId !== 'undefined' && sinkId !== 'default') {
-    // @ts-expect-error
     el.setSinkId(sinkId).catch((err: any) => {
       console.warn('Error setting sinkId:', err)
     })
   }
-}
-
-// Шеринг экрана
-function startShare() {
-  webrtcStore.startScreenShare()
-}
-function stopShare() {
-  webrtcStore.stopScreenShare()
 }
 
 onMounted(async () => {

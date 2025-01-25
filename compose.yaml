@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  entrypoint:
+    image: ghcr.io/alexbidenko/asmy-call/server:latest
+    networks:
+      - server
+    deploy:
+      replicas: 1
+      update_config:
+        failure_action: rollback
+        order: start-first
+      restart_policy:
+        condition: on-failure
+
+networks:
+  server:
+    external:
+      name: server

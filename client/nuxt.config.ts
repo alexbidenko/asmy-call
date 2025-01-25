@@ -5,7 +5,9 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineNuxtConfig({
   modules: [
     '@pinia/nuxt',
-    '@primevue/nuxt-module'
+    '@primevue/nuxt-module',
+    '@nuxtjs/mdc',
+    'nuxt-security',
   ],
   ssr: false,
   nitro: {
@@ -25,6 +27,31 @@ export default defineNuxtConfig({
   },
   primevue: {
     importTheme: { from: '~/theme.ts' },
+  },
+  runtimeConfig: {
+    public: {
+      apiHost: process.env.API_HOST,
+    },
+  },
+  mdc: {
+    highlight: {
+      theme: 'github-dark',
+      langs: [
+        'html',
+        'css',
+        'vue',
+        'js',
+        'ts',
+        'yaml',
+        'json',
+      ],
+      wrapperStyle: true
+    }
+  },
+  hooks: {
+    'prerender:routes'({ routes }) {
+      routes.clear();
+    }
   },
   compatibilityDate: '2024-11-01',
   devtools: { enabled: false }

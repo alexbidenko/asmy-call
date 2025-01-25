@@ -2,6 +2,7 @@ export const useUserStore = defineStore('user', () => {
   const route = useRoute();
 
   const username = ref(localStorage.getItem('username') || '');
+  const initialized = ref(false);
 
   const ready = computed(() => !!username.value.trim());
 
@@ -11,5 +12,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('username', v);
   });
 
-  return { username, ready, room };
+  return { username, initialized, ready, room };
 });

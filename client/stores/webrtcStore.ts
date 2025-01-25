@@ -23,22 +23,26 @@ export const useWebrtcStore = defineStore('webrtc', {
     isMicOn: false,
     isCamOn: false,
     isOutputOn: true,
-    isInCall: false,
+
+    previousAudioConstraints: null as any,
+    previousVideoConstraints: null as any,
 
     // У нас в UI <video ref="localVideo" />
     localVideo: null as HTMLVideoElement | null,
+    localScreen: null as HTMLVideoElement | null,
 
     // На каждого удалённого: (mic / sysAudio / cam / screen)
     transceivers: {} as Record<
       string,
       {
         pc: RTCPeerConnection
-        audioTx1: RTCRtpTransceiver
-        audioTx2: RTCRtpTransceiver
-        videoTx1: RTCRtpTransceiver
-        videoTx2: RTCRtpTransceiver
+        audioTx1?: RTCRtpTransceiver
+        audioTx2?: RTCRtpTransceiver
+        videoTx1?: RTCRtpTransceiver
+        videoTx2?: RTCRtpTransceiver
       }
     >,
+    senders: {} as Record<string, RTCRtpSender>,
 
     remoteTracks: [] as string[],
     negotiationInProgress: false
@@ -49,6 +53,8 @@ export const useWebrtcStore = defineStore('webrtc', {
     // initSocket, joinWebrtcRoom
     // --------------------------------------------------
     initSocket(room: string) {
+      const config = useRuntimeConfig();
+
       if (this.rtcSocket) {
         this.rtcSocket.disconnect()
       }
@@ -58,7 +64,7 @@ export const useWebrtcStore = defineStore('webrtc', {
       this.remoteTracks = []
       this.transceivers = {}
 
-      this.rtcSocket = io('http://localhost:4000', { forceNew: true })
+      this.rtcSocket = io(config.public.apiHost || '', { forceNew: true })
 
       this.rtcSocket.on('connect', () => {
         if (this.rtcSocket) {
@@ -105,9 +111,6 @@ export const useWebrtcStore = defineStore('webrtc', {
       })
     },
 
-    // --------------------------------------------------
-    // createPeerConnection: 4 слота
-    // --------------------------------------------------
     createPeerConnection(remoteId: string) {
       if (this.peerConnections[remoteId]) return this.peerConnections[remoteId]
 
@@ -115,13 +118,7 @@ export const useWebrtcStore = defineStore('webrtc', {
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
       })
 
-      // 4 слота в одном порядке
-      const audioTx1 = pc.addTransceiver('audio', { direction: 'sendrecv' }) // микрофон
-      const audioTx2 = pc.addTransceiver('audio', { direction: 'sendrecv' }) // системный звук
-      const videoTx1 = pc.addTransceiver('video', { direction: 'sendrecv' }) // камера
-      const videoTx2 = pc.addTransceiver('video', { direction: 'sendrecv' }) // экран
-
-      this.transceivers[remoteId] = { pc, audioTx1, audioTx2, videoTx1, videoTx2 }
+      this.transceivers[remoteId] = { pc }
 
       pc.onicecandidate = (evt) => {
         if (evt.candidate) {
@@ -146,11 +143,14 @@ export const useWebrtcStore = defineStore('webrtc', {
         }
         this.remoteTracks.push(track.id)
 
-        if (evt.streams && evt.streams[0]) {
+        if (evt?.streams[0]) {
+          evt.streams[0].onremovetrack = () => {
+            this.removeRemoteStream(evt.streams[0], remoteId)
+          };
+          evt.streams[0].onaddtrack = () => {
+            this.pushRemoteStream(evt.streams[0], remoteId)
+          };
           this.pushRemoteStream(evt.streams[0], remoteId)
-        } else {
-          const newStream = new MediaStream([track])
-          this.pushRemoteStream(newStream, remoteId)
         }
       }
 
@@ -189,6 +189,14 @@ export const useWebrtcStore = defineStore('webrtc', {
       if (!found) {
         this.remoteStreams.push({ id: stream.id, stream, socketId })
       }
+    },
+
+    removeRemoteStream(stream: MediaStream, socketId: string) {
+      if (stream.getTracks().length) return;
+
+      this.remoteStreams = this.remoteStreams.filter(
+        (x) => !(x.socketId === socketId && x.stream.id === stream.id)
+      )
     },
 
     // --------------------------------------------------
@@ -273,44 +281,111 @@ export const useWebrtcStore = defineStore('webrtc', {
     async initLocalStream(audioDevId?: string, videoDevId?: string) {
       const audioConstraints = this.isMicOn
         ? (audioDevId && audioDevId !== 'default')
-          ? { deviceId: audioDevId }
+          ? { deviceId: { exact: audioDevId } }
           : true
-        : false
+        : false;
 
       const videoConstraints = this.isCamOn
         ? (videoDevId && videoDevId !== 'default')
-          ? { deviceId: videoDevId }
+          ? { deviceId: { exact: videoDevId } }
           : true
-        : false
+        : false;
 
-      if (!audioConstraints && !videoConstraints) {
-        if (this.localStream) {
-          this.localStream.getTracks().forEach((t) => t.stop())
-          this.localStream = null
+      if (!this.localStream) {
+        // Если localStream еще не инициализирован, создаем его полностью
+        if (!audioConstraints && !videoConstraints) return;
+
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: videoConstraints
+        });
+
+        this.updateRemoteTracks();
+        return;
+      }
+
+      // Если localStream уже существует, обновляем только необходимые треки
+
+      // Обработка аудио
+      if (audioConstraints !== this.previousAudioConstraints) {
+        const audioTracks = this.localStream.getAudioTracks();
+        audioTracks.forEach(track => {
+          this.localStream.removeTrack(track);
+          track.stop();
+        });
+
+        if (audioConstraints) {
+          try {
+            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+            const newAudioTrack = audioStream.getAudioTracks()[0];
+            this.localStream.addTrack(newAudioTrack);
+          } catch (error) {
+            console.error('Ошибка при обновлении аудио:', error);
+          }
         }
-        this.isInCall = false
-        return
+
+        this.previousAudioConstraints = audioConstraints;
       }
 
-      if (this.localStream) {
-        this.localStream.getTracks().forEach((t) => t.stop())
-        this.localStream = null
+      // Обработка видео
+      if (videoConstraints !== this.previousVideoConstraints) {
+        const videoTracks = this.localStream.getVideoTracks();
+        videoTracks.forEach(track => {
+          this.localStream.removeTrack(track);
+          track.stop();
+        });
+
+        if (videoConstraints) {
+          try {
+            const videoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+            const newVideoTrack = videoStream.getVideoTracks()[0];
+            this.localStream.addTrack(newVideoTrack);
+          } catch (error) {
+            console.error('Ошибка при обновлении видео:', error);
+          }
+        }
+
+        this.previousVideoConstraints = videoConstraints;
       }
 
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-        video: videoConstraints
-      })
+      // Проверяем, остались ли треки
+      const hasAudio = this.localStream.getAudioTracks().length > 0;
+      const hasVideo = this.localStream.getVideoTracks().length > 0;
 
-      for (const [remoteId, { audioTx1, videoTx1 }] of Object.entries(this.transceivers)) {
+      if (!hasAudio && !hasVideo) {
+        this.localStream.getTracks().forEach(track => track.stop());
+        this.localStream = null;
+        return;
+      }
+
+      this.updateRemoteTracks();
+    },
+
+    async updateRemoteTracks() {
+      if (!this.localStream) return;
+
+      for (const [remoteId, { pc, audioTx1, videoTx1 }] of Object.entries(this.transceivers)) {
         const mic = this.localStream.getAudioTracks()[0] || null
-        await audioTx1.sender.replaceTrack(mic)
+        if (mic?.enabled && !this.senders.audioTx1) this.senders.audioTx1 = pc.addTrack(mic, this.localStream);
+        else if (!mic?.enabled && this.senders.audioTx1) {
+          console.log(222);
+          pc.removeTrack(this.senders.audioTx1);
+          delete this.senders.audioTx1;
+        }
+        // await audioTx1.sender.replaceTrack(mic)
 
         const cam = this.localStream.getVideoTracks()[0] || null
-        await videoTx1.sender.replaceTrack(cam)
+        if (cam?.enabled && !this.senders.videoTx1) this.senders.videoTx1 = pc.addTrack(cam, this.localStream);
+        else if (!cam?.enabled && this.senders.videoTx1) {
+          console.log(1111);
+          pc.removeTrack(this.senders.videoTx1);
+          delete this.senders.videoTx1;
+        }
       }
 
-      this.isInCall = true
+      // Если я = SLAVE, тоже делаю Offer => чтобы мастер увидел мои новые треки
+      // (если mySocketId > remoteId => doOffer)
+      await this.slaveForceOffer()
     },
 
     toggleMic(state: boolean) {
@@ -319,10 +394,14 @@ export const useWebrtcStore = defineStore('webrtc', {
         const track = this.localStream.getAudioTracks()[0]
         if (track) {
           track.enabled = state
-        } else if (state) {
-          this.startOrUpdateStream()
+          if (!state) {
+            this.updateRemoteTracks()
+            this.startOrUpdateStream()
+          }
         }
-      } else if (state) {
+      }
+
+      if (state) {
         this.startOrUpdateStream()
       }
     },
@@ -333,10 +412,14 @@ export const useWebrtcStore = defineStore('webrtc', {
         const track = this.localStream.getVideoTracks()[0]
         if (track) {
           track.enabled = state
-        } else if (state) {
-          this.startOrUpdateStream()
+          if (!state) {
+            this.updateRemoteTracks()
+            this.startOrUpdateStream()
+          }
         }
-      } else if (state) {
+      }
+
+      if (state) {
         this.startOrUpdateStream()
       }
     },
@@ -347,34 +430,35 @@ export const useWebrtcStore = defineStore('webrtc', {
         devicesStore.selectedAudioInput,
         devicesStore.selectedVideoInput
       )
-      if (this.localVideo && this.localStream) {
-        this.localVideo.srcObject = this.localStream
-      }
       devicesStore.saveToStorage()
 
-      // Если я = SLAVE, тоже делаю Offer => чтобы мастер увидел мои новые треки
-      // (если mySocketId > remoteId => doOffer)
-      await this.slaveForceOffer()
+      nextTick(() => {
+        if (this.localVideo && this.localStream) {
+          this.localVideo.srcObject = this.localStream
+        }
+      });
     },
 
     // --------------------------------------------------
     // Шеринг экрана (screen + sysAudio)
     // --------------------------------------------------
     async startScreenShare() {
-      if (this.isScreenSharing) return
       const screen = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true
       })
+
+      this.stopScreenShare();
+
       this.screenStream = screen
       this.isScreenSharing = true
 
-      for (const [remoteId, { audioTx2, videoTx2 }] of Object.entries(this.transceivers)) {
+      for (const [remoteId, { pc, audioTx2, videoTx2 }] of Object.entries(this.transceivers)) {
         const sVid = screen.getVideoTracks()[0] || null
-        await videoTx2.sender.replaceTrack(sVid)
+        if (sVid) this.senders.audioTx2 = pc.addTrack(sVid, screen)
 
         const sAud = screen.getAudioTracks()[0] || null
-        await audioTx2.sender.replaceTrack(sAud)
+        if (sAud) this.senders.videoTx2 = pc.addTrack(sAud, screen)
       }
 
       const vidTrack = screen.getVideoTracks()[0]
@@ -384,20 +468,27 @@ export const useWebrtcStore = defineStore('webrtc', {
         }
       }
 
+      nextTick(() => {
+        if (this.localScreen && this.screenStream) {
+          this.localScreen.srcObject = this.screenStream
+        }
+      });
+
       // Если я = SLAVE => делаю Offer
       await this.slaveForceOffer()
     },
 
     stopScreenShare() {
       if (!this.isScreenSharing || !this.screenStream) return
+
+      for (const [remoteId, { pc, audioTx2, videoTx2 }] of Object.entries(this.transceivers)) {
+        if (this.senders.audioTx2) pc.removeTrack(this.senders.audioTx2);
+        if (this.senders.videoTx2) pc.removeTrack(this.senders.videoTx2);
+      }
+
       this.screenStream.getTracks().forEach((t) => t.stop())
       this.screenStream = null
       this.isScreenSharing = false
-
-      for (const [remoteId, { audioTx2, videoTx2 }] of Object.entries(this.transceivers)) {
-        audioTx2.sender.replaceTrack(null)
-        videoTx2.sender.replaceTrack(null)
-      }
 
       // Если я = SLAVE => делаю Offer
       this.slaveForceOffer()
