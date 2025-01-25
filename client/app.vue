@@ -5,5 +5,8 @@
   </Head>
   <Body class="h-full" />
 
+  <NuxtLoadingIndicator />
+  <NuxtRouteAnnouncer />
+
   <NuxtPage />
 </template>
