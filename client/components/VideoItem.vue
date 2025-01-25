@@ -1,6 +1,6 @@
 <template>
   <div
-    class="w-64 overflow-hidden relative"
+    class="overflow-hidden relative"
     :class="{ 'rounded-sm aspect-video': !opened, 'h-full w-full': opened }"
   >
     <video

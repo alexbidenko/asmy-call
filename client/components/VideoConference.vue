@@ -2,7 +2,13 @@
   <div class="@container flex h-full">
     <div id="large-video-slot" class="empty:hidden flex-1" />
 
-    <div class="flex flex-wrap gap-2 p-2 h-fit">
+    <div
+      class="grid grid-cols-1 gap-2 p-2 h-fit"
+      :class="{
+        '@xl:grid-cols-2 @4xl:grid-cols-3 @7xl:grid-cols-4 w-full': !teleportedId,
+        'w-64': teleportedId,
+      }"
+    >
       <!-- Локальное видео-превью -->
       <Teleport
         v-if="!webrtcStore.screenStream || webrtcStore.localStream"
@@ -105,6 +111,13 @@ function setSink(el: HTMLVideoElement, sinkId: string) {
     })
   }
 }
+
+watch([() => webrtcStore.localStream, () => webrtcStore.screenStream, () => webrtcStore.remoteStreams], () => {
+  if (teleportedId.value === 'local-video' && !webrtcStore.localStream) teleportedId.value = '';
+  else if (teleportedId.value === 'local-screen' && !webrtcStore.screenStream) teleportedId.value = '';
+  else if (teleportedId.value.startsWith('stream-') && !webrtcStore.remoteStreams.find((r) => `stream-${r.id}` === teleportedId.value))
+    teleportedId.value = '';
+});
 
 onMounted(async () => {
   // Считываем сохранённые выборы устройств
