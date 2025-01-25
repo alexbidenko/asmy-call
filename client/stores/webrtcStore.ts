@@ -4,6 +4,8 @@ export interface RemoteStreamObj {
   id: string
   socketId: string
   stream: MediaStream
+  video: boolean;
+  audio: boolean;
 }
 
 export const useWebrtcStore = defineStore('webrtc', {
@@ -83,8 +85,31 @@ export const useWebrtcStore = defineStore('webrtc', {
 
       this.rtcSocket.on('user-joined', (data) => {
         const memberStore = useMemberStore()
-        this.createPeerConnection(data.socketId)
+        const pc = this.createPeerConnection(data.socketId)
         memberStore.join({ id: data.socketId, username: data.username })
+
+        // Проверяем, есть ли у нас уже включённая камера/микрофон (localStream) ИЛИ экран (screenStream).
+        // Важно не только "exists", но и "tracks действительно активны".
+        const localActive = !!(this.localStream && this.localStream.getTracks().some(t => t.enabled));
+        // Для screenStream проверяем, что в ней есть треки (например, .readyState === 'live').
+        const screenActive = !!(this.screenStream && this.screenStream.getTracks().some(t => t.readyState === 'live'));
+
+        if (localActive || screenActive) {
+          // Если я "мастер" (mySocketId < data.socketId) => делаю Offer напрямую
+          if (this.mySocketId < data.socketId) {
+            if (pc.signalingState === 'stable' && !this.negotiationInProgress) {
+              this.negotiationInProgress = true;
+              console.log('[user-joined] => doOffer to new user', data.socketId);
+              this.doOffer(pc, data.socketId).finally(() => {
+                this.negotiationInProgress = false;
+              });
+            }
+          } else {
+            // Иначе я "слэйв", делаем slaveForceOffer().
+            console.log('[user-joined] => slaveForceOffer for new user', data.socketId);
+            this.slaveForceOffer();
+          }
+        }
       })
 
       this.rtcSocket.on('webrtcSignal', (payload) => {
@@ -178,6 +203,35 @@ export const useWebrtcStore = defineStore('webrtc', {
         }
       }
 
+      pc.oniceconnectionstatechange = () => {
+        const state = pc.iceConnectionState
+        if (state === 'closed' || state === 'failed') {
+          console.log(`[oniceconnectionstatechange] => state=${state}, cleaning up remoteId=${remoteId}`)
+          // Закрываем PC, убираем из peerConnections
+          pc.close()
+          delete this.peerConnections[remoteId]
+          // Возможно, удаляем this.transceivers[remoteId], и чистим remoteStreams
+          this.remoteStreams = this.remoteStreams.filter(r => r.socketId !== remoteId)
+        }
+      }
+
+      if (this.localStream) {
+        // например, если camera/mic уже включены:
+        this.localStream.getTracks().forEach(track => {
+          if (track.enabled) {
+            pc.addTrack(track, this.localStream!)
+          }
+        })
+      }
+      // если у вас screenStream есть, тоже добавим:
+      if (this.isScreenSharing && this.screenStream) {
+        this.screenStream.getTracks().forEach(track => {
+          if (track.readyState === 'live') {
+            pc.addTrack(track, this.screenStream!)
+          }
+        })
+      }
+
       this.peerConnections[remoteId] = pc
       return pc
     },
@@ -187,12 +241,32 @@ export const useWebrtcStore = defineStore('webrtc', {
         (x) => x.socketId === socketId && x.stream.id === stream.id
       )
       if (!found) {
-        this.remoteStreams.push({ id: stream.id, stream, socketId })
+        this.remoteStreams.push({
+          id: stream.id,
+          stream,
+          socketId,
+          audio: !!stream.getAudioTracks().length,
+          video: !!stream.getVideoTracks().length,
+        })
+      } else {
+        found.audio = !!stream.getAudioTracks().length
+        found.video = !!stream.getVideoTracks().length
       }
     },
 
     removeRemoteStream(stream: MediaStream, socketId: string) {
-      if (stream.getTracks().length) return;
+      if (stream.getTracks().length) {
+        const found = this.remoteStreams.find(
+          (x) => x.socketId === socketId && x.stream.id === stream.id
+        );
+
+        if (found) {
+          found.audio = !!stream.getAudioTracks().length
+          found.video = !!stream.getVideoTracks().length
+        }
+
+        return;
+      }
 
       this.remoteStreams = this.remoteStreams.filter(
         (x) => !(x.socketId === socketId && x.stream.id === stream.id)
@@ -304,10 +378,12 @@ export const useWebrtcStore = defineStore('webrtc', {
         return;
       }
 
+      const getConstraintKey = (constraint: any) => typeof constraint === 'boolean' ? constraint : constraint.deviceId.exact;
+
       // Если localStream уже существует, обновляем только необходимые треки
 
       // Обработка аудио
-      if (audioConstraints !== this.previousAudioConstraints) {
+      if (getConstraintKey(audioConstraints) !== this.previousAudioConstraints) {
         const audioTracks = this.localStream.getAudioTracks();
         audioTracks.forEach(track => {
           this.localStream.removeTrack(track);
@@ -324,11 +400,11 @@ export const useWebrtcStore = defineStore('webrtc', {
           }
         }
 
-        this.previousAudioConstraints = audioConstraints;
+        this.previousAudioConstraints = getConstraintKey(audioConstraints);
       }
 
       // Обработка видео
-      if (videoConstraints !== this.previousVideoConstraints) {
+      if (getConstraintKey(videoConstraints) !== this.previousVideoConstraints) {
         const videoTracks = this.localStream.getVideoTracks();
         videoTracks.forEach(track => {
           this.localStream.removeTrack(track);
@@ -345,17 +421,7 @@ export const useWebrtcStore = defineStore('webrtc', {
           }
         }
 
-        this.previousVideoConstraints = videoConstraints;
-      }
-
-      // Проверяем, остались ли треки
-      const hasAudio = this.localStream.getAudioTracks().length > 0;
-      const hasVideo = this.localStream.getVideoTracks().length > 0;
-
-      if (!hasAudio && !hasVideo) {
-        this.localStream.getTracks().forEach(track => track.stop());
-        this.localStream = null;
-        return;
+        this.previousVideoConstraints = getConstraintKey(videoConstraints);
       }
 
       this.updateRemoteTracks();
@@ -364,28 +430,77 @@ export const useWebrtcStore = defineStore('webrtc', {
     async updateRemoteTracks() {
       if (!this.localStream) return;
 
-      for (const [remoteId, { pc, audioTx1, videoTx1 }] of Object.entries(this.transceivers)) {
-        const mic = this.localStream.getAudioTracks()[0] || null
-        if (mic?.enabled && !this.senders.audioTx1) this.senders.audioTx1 = pc.addTrack(mic, this.localStream);
-        else if (!mic?.enabled && this.senders.audioTx1) {
-          console.log(222);
-          pc.removeTrack(this.senders.audioTx1);
-          delete this.senders.audioTx1;
+      // Обходим всех PC (peerConnections)
+      for (const [remoteId, { pc }] of Object.entries(this.transceivers)) {
+        // Если PC уже закрыт (например, пользователь вышел), пропускаем
+        if (pc.signalingState === 'closed') {
+          continue;
         }
-        // await audioTx1.sender.replaceTrack(mic)
 
-        const cam = this.localStream.getVideoTracks()[0] || null
-        if (cam?.enabled && !this.senders.videoTx1) this.senders.videoTx1 = pc.addTrack(cam, this.localStream);
-        else if (!cam?.enabled && this.senders.videoTx1) {
-          console.log(1111);
-          pc.removeTrack(this.senders.videoTx1);
-          delete this.senders.videoTx1;
+        // Получаем все senders в текущем PC
+        const senders = pc.getSenders();
+
+        // 1) Синхронизируем треки
+        for (const track of this.localStream.getTracks()) {
+          // Ищем, есть ли уже sender с этим track
+          const existingSender = senders.find(s => s.track === track);
+
+          if (!track.enabled) {
+            // Трек "выключен" – если он уже есть в PC, удаляем
+            if (existingSender) {
+              try {
+                pc.removeTrack(existingSender);
+              } catch (err) {
+                console.warn(`[updateRemoteTracks] removeTrack failed`, err);
+              }
+            }
+          } else {
+            // Трек "включен"
+            // Если sender уже существует – ничего не делаем
+            if (!existingSender) {
+              try {
+                pc.addTrack(track, this.localStream!);
+              } catch (err) {
+                console.warn(`[updateRemoteTracks] addTrack failed`, err);
+              }
+            }
+          }
         }
       }
 
-      // Если я = SLAVE, тоже делаю Offer => чтобы мастер увидел мои новые треки
-      // (если mySocketId > remoteId => doOffer)
-      await this.slaveForceOffer()
+      // 2) Обновляем SDP
+      //   - Если мы SLAVE, дергаем slaveForceOffer() (чтобы мастер увидел наши новые треки)
+      //   - Если мы MASTER, делаем doOffer() сами.
+      for (const [remoteId, { pc }] of Object.entries(this.transceivers)) {
+        if (pc.signalingState === 'closed') {
+          continue;
+        }
+
+        if (this.mySocketId > remoteId) {
+          // я SLAVE => slaveForceOffer (уже есть логика, пробежится по всем slavePC)
+          // Не вызываем doOffer для каждого PC, а один общий вызов в конце
+          continue;
+        } else {
+          // я MASTER => делаем Offer напрямую, если stable, без переговоров
+          if (pc.signalingState === 'stable' && !this.negotiationInProgress) {
+            this.negotiationInProgress = true;
+            console.log('[updateRemoteTracks] MASTER -> doOffer for', remoteId);
+            try {
+              await this.doOffer(pc, remoteId);
+            } catch (err) {
+              console.warn('[updateRemoteTracks] doOffer failed', err);
+            } finally {
+              this.negotiationInProgress = false;
+            }
+          }
+        }
+      }
+
+      // Если мы SLAVE – одним общим вызовом обновляем SDP у всех PC, где mySocketId>remoteId
+      if (this.mySocketId && Object.keys(this.transceivers).some(id => id < this.mySocketId)) {
+        // вызываем slaveForceOffer (он сам внутри пробежится по PC)
+        await this.slaveForceOffer();
+      }
     },
 
     toggleMic(state: boolean) {
@@ -443,24 +558,50 @@ export const useWebrtcStore = defineStore('webrtc', {
     // Шеринг экрана (screen + sysAudio)
     // --------------------------------------------------
     async startScreenShare() {
+      if (this.isScreenSharing) return
+
+      // 1) Запрашиваем screen + audio
       const screen = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true
       })
 
-      this.stopScreenShare();
+      // 2) Останавливаем предыдущее, если нужно
+      this.stopScreenShare()
 
+      // 3) Сохраняем новый screenStream
       this.screenStream = screen
       this.isScreenSharing = true
 
-      for (const [remoteId, { pc, audioTx2, videoTx2 }] of Object.entries(this.transceivers)) {
-        const sVid = screen.getVideoTracks()[0] || null
-        if (sVid) this.senders.audioTx2 = pc.addTrack(sVid, screen)
+      // 4) Добавляем треки screenStream в каждый PC (только если PC не "closed")
+      for (const [remoteId, { pc }] of Object.entries(this.transceivers)) {
+        if (pc.signalingState === 'closed') {
+          console.log(`[startScreenShare] skip PC ${remoteId}, because signalingState=closed`)
+          continue
+        }
 
+        // screenVideo (videoTracks[0])
+        const sVid = screen.getVideoTracks()[0] || null
+        if (sVid) {
+          try {
+            this.senders.audioTx2 = pc.addTrack(sVid, screen)
+          } catch (err) {
+            console.warn(`[startScreenShare] addTrack (video) failed:`, err)
+          }
+        }
+
+        // screenAudio (audioTracks[0])
         const sAud = screen.getAudioTracks()[0] || null
-        if (sAud) this.senders.videoTx2 = pc.addTrack(sAud, screen)
+        if (sAud) {
+          try {
+            this.senders.videoTx2 = pc.addTrack(sAud, screen)
+          } catch (err) {
+            console.warn(`[startScreenShare] addTrack (audio) failed:`, err)
+          }
+        }
       }
 
+      // 5) Если пользователь закроет screen, ловим onended
       const vidTrack = screen.getVideoTracks()[0]
       if (vidTrack) {
         vidTrack.onended = () => {
@@ -468,30 +609,80 @@ export const useWebrtcStore = defineStore('webrtc', {
         }
       }
 
+      // 6) Показываем локально
       nextTick(() => {
         if (this.localScreen && this.screenStream) {
           this.localScreen.srcObject = this.screenStream
         }
       });
 
-      // Если я = SLAVE => делаю Offer
+      // 7) Если я SLAVE => doOffer, чтобы мастер увидел
       await this.slaveForceOffer()
     },
 
-    stopScreenShare() {
-      if (!this.isScreenSharing || !this.screenStream) return
+    async stopScreenShare() {
+      // Если экран не расшарен, ничего не делаем
+      if (!this.isScreenSharing || !this.screenStream) return;
 
-      for (const [remoteId, { pc, audioTx2, videoTx2 }] of Object.entries(this.transceivers)) {
-        if (this.senders.audioTx2) pc.removeTrack(this.senders.audioTx2);
-        if (this.senders.videoTx2) pc.removeTrack(this.senders.videoTx2);
+      // Сначала удаляем локальные треки экрана из каждого PC
+      for (const [remoteId, { pc }] of Object.entries(this.transceivers)) {
+        // Пропускаем закрытый PC
+        if (pc.signalingState === 'closed') {
+          console.log('[stopScreenShare] skip closed PC remoteId=', remoteId);
+          continue;
+        }
+
+        // Берём текущие senders
+        const senders = pc.getSenders();
+
+        // Удаляем senders, соответствующие трекам screenStream
+        this.screenStream.getTracks().forEach((track) => {
+          const sender = senders.find(s => s.track === track);
+          if (sender) {
+            try {
+              pc.removeTrack(sender);
+            } catch (err) {
+              console.warn('[stopScreenShare] removeTrack fail:', err);
+            }
+          }
+        });
       }
 
-      this.screenStream.getTracks().forEach((t) => t.stop())
-      this.screenStream = null
-      this.isScreenSharing = false
+      // Останавливаем локально треки экрана
+      this.screenStream.getTracks().forEach((t) => t.stop());
+      this.screenStream = null;
+      this.isScreenSharing = false;
 
-      // Если я = SLAVE => делаю Offer
-      this.slaveForceOffer()
+      // Теперь делаем ренеготиацию:
+      // - если мы "мастер" => doOffer
+      // - если мы "slave" => slaveForceOffer()
+      let didOffer = false;
+      for (const [remoteId, { pc }] of Object.entries(this.transceivers)) {
+        if (pc.signalingState === 'closed') continue;
+
+        if (this.mySocketId < remoteId) {
+          // Я мастер
+          if (pc.signalingState === 'stable' && !this.negotiationInProgress) {
+            this.negotiationInProgress = true;
+            console.log('[stopScreenShare] master => doOffer to', remoteId);
+            try {
+              await this.doOffer(pc, remoteId);
+            } finally {
+              this.negotiationInProgress = false;
+            }
+          }
+          didOffer = true;
+        }
+      }
+
+      // Если ни одному PC не сделали Offer (мы slave для всех), делаем slaveForceOffer
+      if (!didOffer) {
+        console.log('[stopScreenShare] => slaveForceOffer()');
+        await this.slaveForceOffer();
+      }
+
+      // (По итогу удалённые участники при получении новой SDP
+      //  "выкинут" трек со своей стороны → исчезнет «зависший» кадр.)
     },
   }
 })

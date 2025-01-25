@@ -22,8 +22,9 @@
           stream-id="local-video"
           :opened="teleportedId === 'local-video'"
           :username="userStore.username"
-          :video="!!webrtcStore.localStream?.getVideoTracks().length"
-          :audio="!!webrtcStore.localStream?.getAudioTracks().length"
+          :video="!!webrtcStore.isCamOn"
+          :audio="!!webrtcStore.isMicOn"
+          muted
         />
       </Teleport>
       <Teleport v-if="webrtcStore.screenStream" defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
@@ -33,6 +34,7 @@
           stream-id="local-screen"
           :opened="teleportedId === 'local-screen'"
           :username="userStore.username"
+          muted
           video
         />
       </Teleport>
@@ -45,8 +47,8 @@
           :muted="!webrtcStore.isOutputOn"
           :opened="teleportedId === `stream-${obj.id}`"
           :username="obj.username || 'Unknown'"
-          :video="!!obj.stream?.getVideoTracks().length"
-          :audio="!!obj.stream?.getAudioTracks().length"
+          :video="!!obj.video"
+          :audio="!!obj.audio"
         />
       </Teleport>
     </div>
