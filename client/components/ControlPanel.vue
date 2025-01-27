@@ -3,7 +3,7 @@
     <!-- Микрофон -->
     <div class="flex gap-1 p-1 bg-primary-600 rounded-full">
       <Menu ref="micMenu" :model="micItems" :popup="true" class="max-w-80" />
-      <Button @click="micMenu?.show" rounded text>
+      <Button @click="micMenu?.show" :disabled="!micItems.length" rounded text>
         <template #icon>
           <span class="material-icons-outlined">keyboard_arrow_up</span>
         </template>
@@ -21,7 +21,7 @@
     <!-- Вывод звука -->
     <div class="flex gap-1 p-1 bg-primary-600 rounded-full">
       <Menu ref="audioMenu" :model="audioItems" :popup="true" class="max-w-80" />
-      <Button @click="audioMenu?.show" rounded text>
+      <Button @click="audioMenu?.show" :disabled="!audioItems.length" rounded text>
         <template #icon>
           <span class="material-icons-outlined">keyboard_arrow_up</span>
         </template>
@@ -39,7 +39,7 @@
     <!-- Камера -->
     <div class="flex gap-1 p-1 bg-primary-600 rounded-full">
       <Menu ref="videoMenu" :model="videoItems" :popup="true" class="max-w-80" />
-      <Button @click="videoMenu?.show" rounded text>
+      <Button @click="videoMenu?.show" :disabled="!videoItems.length" rounded text>
         <template #icon>
           <span class="material-icons-outlined">keyboard_arrow_up</span>
         </template>

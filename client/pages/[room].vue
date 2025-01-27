@@ -24,4 +24,18 @@
 <script setup lang="ts">
 const userStore = useUserStore();
 const interfaceStore = useInterfaceStore();
+const deviceStore = useDeviceStore();
+
+const handleDeviceChange = async () => {
+  await deviceStore.enumerateDevices();
+  console.log('[devicechange] Updated list of devices');
+};
+
+onMounted(() => {
+  navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+});
+
+onBeforeUnmount(() => {
+  navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+});
 </script>

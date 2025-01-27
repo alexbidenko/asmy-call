@@ -424,11 +424,14 @@ export const useWebrtcStore = defineStore('webrtc', {
         this.previousVideoConstraints = getConstraintKey(videoConstraints);
       }
 
-      this.updateRemoteTracks();
+      await this.updateRemoteTracks();
     },
 
     async updateRemoteTracks() {
       if (!this.localStream) return;
+
+      const deviceStore = useDeviceStore();
+      void deviceStore.enumerateDevices();
 
       // Обходим всех PC (peerConnections)
       for (const [remoteId, { pc }] of Object.entries(this.transceivers)) {
