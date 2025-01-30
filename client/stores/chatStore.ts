@@ -43,6 +43,10 @@ export const useChatStore = defineStore('chat', {
         name: userStore.username,
         text
       })
-    }
+    },
+    disconnect() {
+      this.socket?.disconnect();
+      this.$reset();
+    },
   }
 })

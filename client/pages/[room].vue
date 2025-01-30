@@ -18,6 +18,8 @@
     </Splitter>
 
     <ControlPanel class="mt-auto" />
+
+    <SettingDialog />
   </div>
 </template>
 

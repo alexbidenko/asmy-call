@@ -51,6 +51,30 @@ export const useWebrtcStore = defineStore('webrtc', {
   }),
 
   actions: {
+    disconnect() {
+      this.rtcSocket?.disconnect();
+      this.rtcSocket = null;
+
+      // 2) Закрыть все PeerConnections
+      for (const pcObj of Object.values(this.peerConnections)) {
+        pcObj.close();
+      }
+
+      // 3) Остановить локальные треки (камера/микрофон)
+      if (this.localStream) {
+        this.localStream.getTracks().forEach(t => t.stop());
+        this.localStream = null;
+      }
+
+      // 4) Остановить трансляцию экрана, если запущена
+      if (this.screenStream) {
+        this.screenStream.getTracks().forEach(t => t.stop());
+        this.screenStream = null;
+      }
+      this.isScreenSharing = false;
+
+      this.$reset();
+    },
     // --------------------------------------------------
     // initSocket, joinWebrtcRoom
     // --------------------------------------------------

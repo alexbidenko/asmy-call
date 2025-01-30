@@ -12,12 +12,12 @@
       class="bg-black h-full w-full object-contain object-center"
       v-bind="$attrs"
     />
-    <div v-if="!video" class="bg-surface-800 flex items-center justify-center h-full w-full">
+    <div v-if="!video" class="bg-surface-300 dark:bg-surface-800 flex items-center justify-center h-full w-full">
       <Avatar :label="label" class="mr-2" size="large" shape="circle" />
     </div>
-    <span class="absolute bottom-0 left-0 right-0 bg-surface-600/20 text-center text-sm flex items-center h-8 gap-2 justify-center">
+    <span class="absolute bottom-0 left-0 right-0 bg-surface-400/20 dark:bg-surface-600/20 text-center text-sm flex items-center h-8 gap-2 justify-center">
       {{ username }}
-      <span v-if="!audio" class="material-icons-outlined text-red-400 !text-lg">
+      <span v-if="!audio" class="material-icons-outlined text-red-600 dark:text-red-400 !text-lg">
         mic_off
       </span>
     </span>

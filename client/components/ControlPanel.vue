@@ -1,5 +1,5 @@
 <template>
-  <div class="flex justify-center gap-2 py-2 px-4">
+  <div class="flex justify-center gap-2 py-2 px-4 bg-surface-100 dark:bg-surface-800">
     <!-- Микрофон -->
     <div class="flex gap-1 p-1 bg-primary-600 rounded-full">
       <Menu ref="micMenu" :model="micItems" :popup="true" class="max-w-80" />
@@ -91,13 +91,35 @@
         </template>
       </Button>
     </div>
+
+    <div class="flex gap-1 p-1 rounded-full bg-primary-400">
+      <Button @click="interfaceStore.isSettingDialogVisible = true" rounded>
+        <template #icon>
+          <span class="material-icons-outlined">
+            settings
+          </span>
+        </template>
+      </Button>
+    </div>
+
+    <div class="flex gap-1 p-1 rounded-full bg-primary-400">
+      <Button @click="exit" rounded>
+        <template #icon>
+          <span class="material-icons-outlined text-red-500 dark:text-red-600">
+            phone_disabled
+          </span>
+        </template>
+      </Button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { MenuItem } from 'primevue/menuitem'
 
+const router = useRouter();
 const interfaceStore = useInterfaceStore()
+const chatStore = useChatStore()
 const webrtcStore = useWebrtcStore()
 const deviceStore = useDeviceStore()
 
@@ -177,4 +199,10 @@ function startShare() {
 function stopShare() {
   webrtcStore.stopScreenShare()
 }
+
+const exit = () => {
+  chatStore.disconnect();
+  webrtcStore.disconnect();
+  router.push('/');
+};
 </script>
