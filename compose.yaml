@@ -6,7 +6,7 @@ services:
     expose:
       - 5000
     networks:
-      - app
+      - local
       - server
     deploy:
       replicas: 1
@@ -19,7 +19,7 @@ services:
   client:
     image: ${IMAGE_PROJECT}/client:latest
     networks:
-      - app
+      - local
     deploy:
       replicas: 1
       update_config:
@@ -31,7 +31,7 @@ services:
   server:
     image: ${IMAGE_PROJECT}/server:latest
     networks:
-      - app
+      - local
     deploy:
       replicas: 1
       update_config:
@@ -41,6 +41,7 @@ services:
         condition: on-failure
 
 networks:
+  local:
   server:
     external:
       name: server
