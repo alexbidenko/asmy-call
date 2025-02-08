@@ -94,7 +94,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     rtcSocket.value = io(config.public.apiHost || '', { forceNew: true })
 
     rtcSocket.value.on('connect', () => {
-      if (rtcSocket.value) {
+      if (rtcSocket.value?.id) {
         mySocketId.value = rtcSocket.value.id
         console.log('[WebRTC] mySocketId=', mySocketId.value)
       }
