@@ -9,7 +9,7 @@ import { join } from 'path';
     ...(process.env.NODE_ENV === 'production' ? [
       ServeStaticModule.forRoot({
         renderPath: '*',
-        rootPath: join(__dirname, '..', 'client'),
+        rootPath: join(__dirname, '../..', 'client'),
       }),
     ] : []),
     ChatModule,
