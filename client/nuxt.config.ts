@@ -22,6 +22,9 @@ export default defineNuxtConfig({
   app: {
     rootAttrs: { class: 'h-full' }
   },
+  nitro: {
+    compressPublicAssets: true,
+  },
   primevue: {
     importTheme: { from: '~/theme.ts' },
   },

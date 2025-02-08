@@ -2,9 +2,36 @@ version: '3.8'
 
 services:
   entrypoint:
-    image: ghcr.io/alexbidenko/asmy-call/application:latest
+    image: ${IMAGE_PROJECT}/entrypoint:latest
+    expose:
+      - 5000
     networks:
+      - app
       - server
+    deploy:
+      replicas: 1
+      update_config:
+        failure_action: rollback
+        order: start-first
+      restart_policy:
+        condition: on-failure
+
+  client:
+    image: ${IMAGE_PROJECT}/client:latest
+    networks:
+      - app
+    deploy:
+      replicas: 1
+      update_config:
+        failure_action: rollback
+        order: start-first
+      restart_policy:
+        condition: on-failure
+
+  server:
+    image: ${IMAGE_PROJECT}/server:latest
+    networks:
+      - app
     deploy:
       replicas: 1
       update_config:
