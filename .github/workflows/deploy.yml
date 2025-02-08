@@ -77,7 +77,7 @@ jobs:
       - name: Build and push entrypoint
         uses: docker/build-push-action@v5
         with:
-          context: nginx
+          context: entrypoint
           push: true
           tags: ${{ env.IMAGE_PROJECT }}/entrypoint:latest
 
