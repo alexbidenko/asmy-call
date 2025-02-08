@@ -8,6 +8,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main",
+    "typecheck": "tsc",
     "lint": "eslint \"{src,apps,libs}/**/*.ts\" --fix"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "@nestjs/platform-socket.io": "11.0.8",
     "@nestjs/serve-static": "5.0.2",
     "@nestjs/websockets": "11.0.8",
+    "fastify": "5.2.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.1",
     "socket.io": "4.8.1"

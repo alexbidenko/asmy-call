@@ -1,6 +1,12 @@
 import { Controller, Get, Res } from '@nestjs/common';
-import { FastifyReply } from 'fastify';
+import type { FastifyReply } from 'fastify';
 import { join } from 'path';
+
+declare module 'fastify' {
+  interface FastifyReply {
+    sendFile(filePath: string, options?: { root: string }): FastifyReply;
+  }
+}
 
 @Controller()
 export class AppController {
