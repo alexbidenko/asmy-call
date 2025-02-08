@@ -33,9 +33,6 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useChatStore } from '@/stores/chatStore'
-
 const props = defineProps<{ room: string }>()
 const chatStore = useChatStore()
 const text = ref('')

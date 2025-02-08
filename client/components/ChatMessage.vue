@@ -10,7 +10,7 @@
 </template>
 
 <script lang="ts" setup>
-import type {ChatMessage} from "~/stores/chatStore";
+import type {ChatMessage} from "~/stores/chat";
 
 defineProps<{
   message: ChatMessage;

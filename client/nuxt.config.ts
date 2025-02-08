@@ -1,4 +1,3 @@
-import Aura from '@primevue/themes/aura';
 import tailwindcss from '@tailwindcss/vite'
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
@@ -8,6 +7,7 @@ export default defineNuxtConfig({
     '@primevue/nuxt-module',
     '@nuxtjs/mdc',
     'nuxt-security',
+    '@vite-pwa/nuxt',
   ],
   ssr: false,
   nitro: {
@@ -47,6 +47,38 @@ export default defineNuxtConfig({
       ],
       wrapperStyle: true
     }
+  },
+  pwa: {
+    registerType: 'autoUpdate',
+    manifest: {
+      name: 'Asmy Call',
+      short_name: 'Asmy Call',
+      lang: 'ru',
+      description: 'Asmy Call - удобное приложение для аудио и видео звонков',
+      theme_color: '#84cc16',
+      background_color: '#18181b',
+      start_url: '/',
+      display: 'standalone',
+      prefer_related_applications: false,
+      icons: [
+        {
+          src: 'pwa-192x192.png',
+          sizes: '192x192',
+          type: 'image/png',
+        },
+        {
+          src: 'pwa-512x512.png',
+          sizes: '512x512',
+          type: 'image/png',
+        },
+        {
+          src: 'pwa-512x512.png',
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any maskable',
+        },
+      ],
+    },
   },
   hooks: {
     'prerender:routes'({ routes }) {

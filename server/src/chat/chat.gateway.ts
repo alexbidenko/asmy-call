@@ -48,7 +48,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { room: string }
   ) {
-    client.join(payload.room);
+    void client.join(payload.room);
     const history = this.roomMessages[payload.room] || [];
     client.emit('roomHistory', history);
 

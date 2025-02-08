@@ -41,7 +41,7 @@ export class WebRtcGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleJoinWebrtcRoom(client: Socket, payload: { room: string; username: string }) {
     console.log(`[joinWebrtcRoom] client=${client.id}, room=${payload.room}, user=${payload.username}`);
     const { room, username } = payload;
-    client.join(room);
+    void client.join(room);
 
     // Если вдруг client.id уже есть - убираем прежнюю запись
     this.rooms[room] = (this.rooms[room] || []).filter(u => u.id !== client.id);

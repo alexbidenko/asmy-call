@@ -14,11 +14,13 @@ const userStore = useUserStore();
 
 const username = ref(userStore.username);
 
-const onSubmit = () => {
+const onSubmit = async () => {
   userStore.username = username.value.trim();
   userStore.initialized = true;
 
-  if (!userStore.room) {
+  await userStore.initialize();
+
+  if (userStore.initialized && !userStore.room) {
     const randomRoom = crypto.randomUUID();
     router.push(`/${randomRoom}`);
   }

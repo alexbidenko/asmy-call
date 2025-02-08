@@ -19,6 +19,7 @@
         <VideoItem
           @teleport="toggleTeleportId"
           :video-ref="(el) => (webrtcStore.localVideo = el)"
+          :stream="webrtcStore.localStream"
           stream-id="local-video"
           :opened="teleportedId === 'local-video'"
           :username="userStore.username"
@@ -31,6 +32,7 @@
         <VideoItem
           @teleport="toggleTeleportId"
           :video-ref="(el) => (webrtcStore.localScreen = el)"
+          :stream="webrtcStore.screenStream"
           stream-id="local-screen"
           :opened="teleportedId === 'local-screen'"
           :username="userStore.username"
@@ -43,6 +45,7 @@
         <VideoItem
           @teleport="toggleTeleportId"
           :video-ref="(el) => setRemoteRef(el, obj.id)"
+          :stream="obj.stream"
           :stream-id="`stream-${obj.id}`"
           :muted="!webrtcStore.isOutputOn"
           :opened="teleportedId === `stream-${obj.id}`"
@@ -56,8 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
-import type { RemoteStreamObj } from '~/stores/webrtcStore'
+import type { RemoteStreamObj } from '~/stores/webrtc'
 import type { MemberType } from '~/stores/member'
 
 const props = defineProps<{ room: string }>()

@@ -11,6 +11,9 @@ const interfaceStore = useInterfaceStore();
 
   <NuxtLoadingIndicator />
   <NuxtRouteAnnouncer />
+  <VitePwaManifest />
 
   <NuxtPage />
+
+  <Toast position="bottom-center" />
 </template>

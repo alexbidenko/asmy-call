@@ -1,7 +1,7 @@
 <template>
   <Welcome v-if="!userStore.ready" />
   <div v-else-if="!userStore.initialized" class="h-full flex justify-center items-center">
-    <Button @click="userStore.initialized = true" label="Присоединиться" size="large" text />
+    <Button @click="userStore.initialize" label="Присоединиться" size="large" text />
   </div>
   <div v-else class="h-full flex flex-col">
     <Splitter
