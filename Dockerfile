@@ -34,7 +34,7 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
-COPY server/package.json server/bun.lock ./
+COPY --chown=bun:bun server/package.json server/bun.lock ./
 COPY --from=build-client --chown=bun:bun /app/.output/public ./client
 COPY --from=build-server --chown=bun:bun /app/dist ./dist
 COPY --from=dependencies --chown=bun:bun /app/node_modules ./node_modules
