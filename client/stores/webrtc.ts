@@ -34,13 +34,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const localScreen = ref<HTMLVideoElement | null>(null)
 
   // На каждого удалённого: (mic / sysAudio / cam / screen)
-  const transceivers = ref<Record<string, {
-    pc: RTCPeerConnection
-    audioTx1?: RTCRtpTransceiver
-    audioTx2?: RTCRtpTransceiver
-    videoTx1?: RTCRtpTransceiver
-    videoTx2?: RTCRtpTransceiver
-  }>>({})
+  const transceivers = ref<Record<string, RTCPeerConnection>>({})
 
   const senders = ref<Record<string, RTCRtpSender>>({})
   const remoteTracks = ref<string[]>([])
@@ -169,7 +163,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     })
 
-    transceivers.value[remoteId] = { pc }
+    transceivers.value[remoteId] = pc
 
     pc.onicecandidate = (evt) => {
       if (evt.candidate) {
@@ -350,7 +344,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // SLAVE: вызвать doOffer, если я хочу отправлять свои треки
   // --------------------------------------------------
   const slaveForceOffer = async () => {
-    for (const [remoteId, { pc }] of Object.entries(transceivers.value)) {
+    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (mySocketId.value > remoteId) {
         if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
           negotiationInProgress.value = true
@@ -446,7 +440,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     void deviceStore.enumerateDevices()
 
     // Обходим всех PC
-    for (const [remoteId, { pc }] of Object.entries(transceivers.value)) {
+    for (const pc of Object.values(transceivers.value)) {
       if (pc.signalingState === 'closed') {
         continue
       }
@@ -477,7 +471,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
 
     // 2) Обновляем SDP
-    for (const [remoteId, { pc }] of Object.entries(transceivers.value)) {
+    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (pc.signalingState === 'closed') {
         continue
       }
@@ -571,7 +565,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     screenStream.value = screen
     isScreenSharing.value = true
 
-    for (const [remoteId, { pc }] of Object.entries(transceivers.value)) {
+    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (pc.signalingState === 'closed') {
         console.log(`[startScreenShare] skip PC ${remoteId}, because signalingState=closed`)
         continue
@@ -614,7 +608,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const stopScreenShare = async () => {
     if (!isScreenSharing.value || !screenStream.value) return
 
-    for (const [remoteId, { pc }] of Object.entries(transceivers.value)) {
+    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (pc.signalingState === 'closed') {
         console.log('[stopScreenShare] skip closed PC remoteId=', remoteId)
         continue
@@ -637,7 +631,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     isScreenSharing.value = false
 
     let didOffer = false
-    for (const [remoteId, { pc }] of Object.entries(transceivers.value)) {
+    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (pc.signalingState === 'closed') continue
       if (mySocketId.value < remoteId) {
         if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
