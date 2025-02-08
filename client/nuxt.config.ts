@@ -10,9 +10,6 @@ export default defineNuxtConfig({
     '@vite-pwa/nuxt',
   ],
   ssr: false,
-  nitro: {
-    preset: 'bun',
-  },
   vite: {
     plugins: [tailwindcss()],
   },
