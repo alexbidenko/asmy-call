@@ -65,15 +65,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       screenStream.value = null
     }
     isScreenSharing.value = false
-
-    // Reset Pinia state
-    // (Since we're in Composition API store, we can do $reset() if needed,
-    //  but it might clear everything. This matches the original code.)
-    //
-    // The original code: this.$reset()
-    // We'll replicate exactly:
-    //
-    ;(useWebrtcStore as any).store.$reset()
   }
 
   // --------------------------------------------------

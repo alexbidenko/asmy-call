@@ -46,10 +46,6 @@ export const useChatStore = defineStore('chat', () => {
 
   const disconnect = () => {
     socket.value?.disconnect()
-
-    socket.value = null
-    messages.value = []
-    room.value = ''
   }
 
   // expose
@@ -60,6 +56,6 @@ export const useChatStore = defineStore('chat', () => {
 
     initChat,
     sendMessage,
-    disconnect
+    disconnect,
   }
 });

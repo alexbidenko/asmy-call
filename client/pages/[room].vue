@@ -5,14 +5,20 @@
   </div>
   <div v-else class="h-full flex flex-col">
     <Splitter
-      class="flex-1 !rounded-none overflow-hidden"
+      class="flex-1 !rounded-none overflow-hidden relative"
       state-storage="local"
       state-key="video-chat-splitter"
+      :pt="{ gutter: '!hidden md:!block' }"
     >
       <SplitterPanel :size="75" class="min-w-64">
         <VideoConference :room="userStore.room" />
       </SplitterPanel>
-      <SplitterPanel v-if="interfaceStore.isChatVisible" :size="25" class="min-w-64">
+      <SplitterPanel
+        v-if="interfaceStore.isChatVisible"
+        :size="25"
+        class="min-w-64 absolute inset-0 md:static"
+        style="background-color: var(--p-splitter-background)"
+      >
         <ChatBox :room="userStore.room" />
       </SplitterPanel>
     </Splitter>
