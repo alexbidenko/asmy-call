@@ -1,62 +1,6 @@
-<template>
-  <div
-    class="overflow-hidden relative"
-    :class="{
-      'rounded-sm aspect-video': !opened,
-      'h-full w-full': opened
-    }"
-  >
-    <video
-      v-show="video"
-      :ref="(el) => videoRefLocal(el as HTMLVideoElement)"
-      autoplay
-      playsinline
-      :muted="audioOutputStore.muted"
-      class="bg-black h-full w-full object-contain object-center"
-      v-bind="$attrs"
-    />
-    <div
-      v-if="!video"
-      class="bg-surface-300 dark:bg-surface-800 flex items-center justify-center h-full w-full"
-    >
-      <Avatar
-        :label="label"
-        size="large"
-        shape="circle"
-      />
-    </div>
-
-    <!-- Небольшая "полоска" визуализации (пример). Появляется только если audio. -->
-    <div
-      v-if="audio"
-      class="absolute top-0 left-0 bottom-8 w-1 dark:bg-primary-500 bg-primary-600"
-      :style="visualizerStyle"
-    />
-
-    <div
-      class="absolute bottom-0 left-0 right-0 bg-surface-400/20 dark:bg-surface-600/20 text-center text-sm flex items-center h-8 gap-2 justify-center"
-    >
-      <div
-        v-if="audio"
-        class="absolute top-0 left-0 h-full w-1 dark:bg-primary-500 bg-primary-600"
-      />
-
-      {{ username }}
-      <span
-        v-if="!audio"
-        class="material-icons-outlined text-red-600 dark:text-red-400 !text-lg"
-      >
-        mic_off
-      </span>
-    </div>
-  </div>
-</template>
-
 <script lang="ts" setup>
-// Те же props, что и раньше
 const props = defineProps<{
   stream?: MediaStream | null;
-  streamId: string;
   videoRef: (el: HTMLVideoElement) => void;
   username: string;
   video?: boolean;
@@ -159,6 +103,10 @@ function videoRefLocal(el: HTMLVideoElement) {
   localVideoEl.value = el
 }
 
+watch(stream, (v) => {
+  if (v) props.videoRef(localVideoEl.value)
+});
+
 watch([audio, stream], ([v, s]) => {
   if (v && s) {
     setupAudioAnalyser(s);
@@ -200,3 +148,57 @@ onBeforeUnmount(() => {
   if (localVideoEl.value) audioOutputStore.dispose(localVideoEl.value);
 });
 </script>
+
+<template>
+  <div
+    class="overflow-hidden relative"
+    :class="[{
+      'rounded-sm aspect-video': !opened,
+      'h-full w-full': opened,
+    }]"
+  >
+    <video
+      v-show="video"
+      :ref="(el) => videoRefLocal(el as HTMLVideoElement)"
+      autoplay
+      playsinline
+      :muted="audioOutputStore.muted"
+      class="bg-black h-full w-full object-contain object-center"
+      v-bind="$attrs"
+    />
+    <div
+      v-if="!video"
+      class="bg-surface-300 dark:bg-surface-800 flex items-center justify-center h-full w-full"
+    >
+      <Avatar
+        :label="label"
+        size="large"
+        shape="circle"
+      />
+    </div>
+
+    <!-- Небольшая "полоска" визуализации (пример). Появляется только если audio. -->
+    <div
+      v-if="audio"
+      class="absolute top-0 left-0 bottom-8 w-1 dark:bg-primary-500 bg-primary-600"
+      :style="visualizerStyle"
+    />
+
+    <div
+      class="absolute bottom-0 left-0 right-0 bg-surface-400/20 dark:bg-surface-600/20 text-center text-sm flex items-center h-8 gap-2 justify-center"
+    >
+      <div
+        v-if="audio"
+        class="absolute top-0 left-0 h-full w-1 dark:bg-primary-500 bg-primary-600"
+      />
+
+      {{ username }}
+      <span
+        v-if="!audio"
+        class="material-icons-outlined text-red-600 dark:text-red-400 !text-lg"
+      >
+        mic_off
+      </span>
+    </div>
+  </div>
+</template>

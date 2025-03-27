@@ -1,65 +1,3 @@
-<template>
-  <div class="@container flex h-full">
-    <div id="large-video-slot" class="empty:hidden flex-1" />
-
-    <div
-      v-show="interfaceStore.isMembersVisible"
-      class="grid grid-cols-1 gap-2 p-2 h-fit"
-      :class="{
-        '@xl:grid-cols-2 @4xl:grid-cols-3 @7xl:grid-cols-4 w-full': !teleportedId,
-        'w-64': teleportedId,
-      }"
-    >
-      <!-- Локальное видео-превью -->
-      <Teleport
-        defer
-        to="#large-video-slot"
-        :disabled="teleportedId !== 'local-video'"
-      >
-        <VideoItem
-          key="local-video"
-          @click="toggleTeleportId('local-video')"
-          :video-ref="(el) => (webrtcStore.localVideo = el)"
-          :stream="webrtcStore.localStream"
-          stream-id="local-video"
-          :opened="teleportedId === 'local-video'"
-          :username="userStore.username"
-          :video="!!webrtcStore.isCamOn"
-          :audio="!!webrtcStore.isMicOn"
-          muted
-        />
-      </Teleport>
-      <Teleport v-if="screenShareStore.stream" defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
-        <VideoItem
-          key="local-screen"
-          @click="toggleTeleportId('local-screen')"
-          :video-ref="(el) => (screenShareStore.element = el)"
-          :stream="screenShareStore.stream"
-          stream-id="local-screen"
-          :opened="teleportedId === 'local-screen'"
-          :username="userStore.username"
-          muted
-          video
-        />
-      </Teleport>
-
-      <Teleport v-for="obj in streams" :key="obj.id" defer to="#large-video-slot" :disabled="teleportedId !== `stream-${obj.id}`">
-        <VideoItem
-          :key="`stream-${obj.id}`"
-          @click="toggleTeleportId(`stream-${obj.id}`)"
-          :video-ref="(el) => setRemoteRef(el, obj.id)"
-          :stream="obj.stream"
-          :stream-id="`stream-${obj.id}`"
-          :opened="teleportedId === `stream-${obj.id}`"
-          :username="obj.username || 'Unknown'"
-          :video="!!obj.video"
-          :audio="!!obj.audio"
-        />
-      </Teleport>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import type { RemoteStreamObj } from '~/stores/webrtc'
 import type { MemberType } from '~/stores/member'
@@ -75,34 +13,51 @@ const screenShareStore = useScreenShareStore();
 
 const teleportedId = ref('');
 
-const toggleTeleportId = (id: string) => {
-  teleportedId.value = teleportedId.value === id ? '' : id;
-}
+const idsMap = reactive(new Map<string, string>());
 
 /**
  * Собираем список remoteStreams + username из memberStore
  */
 const streams = computed(() => {
-  const map = new Map<string, Partial<RemoteStreamObj & MemberType> & { id: string }>()
+  // TODO: все еще не идеально с этими ключами
+  const map = new Map<string, Partial<RemoteStreamObj & MemberType> & { id: string; staticId: string }>();
 
-  memberStore.list.forEach((el) => {
-    map.set(el.id, {
+  // TODO: а тут вообще иногда проблемы с обновлением, если так не считать явно
+  const remoteStreams = webrtcStore.remoteStreams;
+  remoteStreams.forEach((el) => {
+    let id: string;
+    if (idsMap.get(el.socketId) === el.id) {
+      id = el.socketId;
+    } else if (!idsMap.has(el.socketId)) {
+      idsMap.set(el.socketId, el.id);
+      id = el.socketId;
+    } else id = el.id;
+
+    map.set(id, {
       ...el,
-      ...(webrtcStore.remoteStreams.find((r) => r.socketId === el.id) || {})
+      username:
+        memberStore.list.find((m) => m.id === el.socketId)?.username || 'Unknown',
+      staticId: id,
     })
   });
 
-  webrtcStore.remoteStreams.forEach((el) => {
-    map.delete(el.socketId);
-    map.set(el.id, {
-      ...el,
-      username:
-        memberStore.list.find((m) => m.id === el.socketId)?.username || 'Unknown'
-    })
+  memberStore.list.forEach((el) => {
+    if (!remoteStreams.some((s) => s.socketId === el.id)) {
+      idsMap.delete(el.id);
+      map.set(el.id, { ...el, staticId: el.id });
+    }
+  });
+
+  idsMap.forEach((_, id) => {
+    if (!memberStore.list.some((el) => el.id === id)) idsMap.delete(id);
   });
 
   return [...map.values()]
 });
+
+const toggleTeleportId = (id: string) => {
+  teleportedId.value = teleportedId.value === id ? '' : id;
+}
 
 function setRemoteRef(el: HTMLVideoElement | null, streamId: string) {
   if (!el) return
@@ -143,3 +98,81 @@ onMounted(async () => {
   webrtcStore.startOrUpdateStream()
 })
 </script>
+
+<template>
+  <div class="@container flex h-full">
+    <div id="large-video-slot" class="empty:hidden flex-1" />
+
+    <div
+      v-show="interfaceStore.isMembersVisible"
+      class="grid grid-cols-1 gap-2 p-2 h-fit"
+      :class="{
+        '@xl:grid-cols-2 @4xl:grid-cols-3 @7xl:grid-cols-4 w-full': !teleportedId,
+        'w-64': teleportedId,
+      }"
+    >
+      <LayoutGroup>
+        <Teleport
+          defer
+          to="#large-video-slot"
+          :disabled="teleportedId !== 'local-video'"
+        >
+          <VideoItem
+            @click="toggleTeleportId('local-video')"
+            :video-ref="(el) => (webrtcStore.localVideo = el)"
+            :stream="webrtcStore.localStream"
+            :opened="teleportedId === 'local-video'"
+            :username="userStore.username"
+            :video="webrtcStore.isCamOn"
+            :audio="webrtcStore.isMicOn"
+            muted
+          />
+        </Teleport>
+
+        <AnimatePresence>
+          <Motion
+            v-if="screenShareStore.stream"
+            key="local-screen"
+            layout
+            :initial="{ opacity: 0 }"
+            :animate="{ opacity: 1, transition: { delay: 0.5 } }"
+            :exit="{ opacity: 0 }"
+          >
+            <Teleport defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
+              <VideoItem
+                @click="toggleTeleportId('local-screen')"
+                :video-ref="(el) => (screenShareStore.element = el)"
+                :stream="screenShareStore.stream"
+                :opened="teleportedId === 'local-screen'"
+                :username="userStore.username"
+                muted
+                video
+              />
+            </Teleport>
+          </Motion>
+
+          <Motion
+            v-for="obj in streams"
+            :key="`stream-${obj.staticId}`"
+            layout
+            :initial="{ opacity: 0 }"
+            :animate="{ opacity: 1 }"
+            :exit="{ opacity: 0 }"
+          >
+            <Teleport defer to="#large-video-slot" :disabled="teleportedId !== `stream-${obj.id}`">
+              <VideoItem
+                @click="toggleTeleportId(`stream-${obj.id}`)"
+                :video-ref="(el) => setRemoteRef(el, obj.id)"
+                :stream="obj.stream"
+                :opened="teleportedId === `stream-${obj.id}`"
+                :username="obj.staticId || obj.username || 'Unknown'"
+                :video="!!obj.video"
+                :audio="!!obj.audio"
+              />
+            </Teleport>
+          </Motion>
+        </AnimatePresence>
+      </LayoutGroup>
+    </div>
+  </div>
+</template>
