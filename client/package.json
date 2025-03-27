@@ -31,10 +31,5 @@
     "@primevue/nuxt-module": "4.3.3",
     "@vite-pwa/nuxt": "0.10.8",
     "nuxt-security": "2.2.0"
-  },
-  "onlyBuiltDependencies": [
-    "@parcel/watcher",
-    "esbuild",
-    "vue-demi"
-  ]
+  }
 }
