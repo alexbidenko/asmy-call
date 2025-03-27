@@ -22,7 +22,7 @@ export const useAudioOutputStore = defineStore('audio_output', () => {
     if (sources.has(el)) sources.delete(el);
   };
 
-  watch(() => deviceStore.selectedAudioOutput, (v) => {
+  watch(() => deviceStore.selectedAudioOutput, () => {
     sources.forEach(setup);
   }, { immediate: true });
 

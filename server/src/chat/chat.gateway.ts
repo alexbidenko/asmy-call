@@ -33,7 +33,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log('[Chat] Client disconnected:', client.id);
     // По желанию можно чистить roomMessages, если все вышли
 
-    const rooms = Object.entries(this.members).filter(([, sockets]) => sockets.includes(client.id));
+    const rooms = Object.entries(this.members).filter(([, sockets]) =>
+      sockets.includes(client.id),
+    );
     for (const [room, sockets] of rooms) {
       this.members[room] = sockets.filter((id) => id !== client.id);
       if (this.members[room].length === 0) {
@@ -46,19 +48,22 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('joinRoom')
   handleJoinRoom(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { room: string }
+    @MessageBody() payload: { room: string },
   ) {
     void client.join(payload.room);
     const history = this.roomMessages[payload.room] || [];
     client.emit('roomHistory', history);
 
-    this.members[payload.room] = [...(this.members[payload.room] || []), client.id];
+    this.members[payload.room] = [
+      ...(this.members[payload.room] || []),
+      client.id,
+    ];
   }
 
   @SubscribeMessage('sendMessage')
   handleSendMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { room: string; name: string; text: string }
+    @MessageBody() payload: { room: string; name: string; text: string },
   ) {
     const { room, name, text } = payload;
     if (!this.roomMessages[room]) {

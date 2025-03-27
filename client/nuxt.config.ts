@@ -8,6 +8,7 @@ export default defineNuxtConfig({
     '@nuxtjs/mdc',
     'nuxt-security',
     '@vite-pwa/nuxt',
+    'motion-v/nuxt',
   ],
   ssr: false,
   vite: {

@@ -30,7 +30,9 @@ export class WebRtcGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.rooms[room] = this.rooms[room].filter((u) => u.id !== client.id);
       const after = this.rooms[room].length;
       if (before !== after) {
-        console.log(`[handleDisconnect] in room=${room}, removed client=${client.id}`);
+        console.log(
+          `[handleDisconnect] in room=${room}, removed client=${client.id}`,
+        );
         client.to(room).emit('user-left', { socketId: client.id });
       }
       if (!after) delete this.rooms[room];
@@ -38,13 +40,20 @@ export class WebRtcGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('joinWebrtcRoom')
-  handleJoinWebrtcRoom(client: Socket, payload: { room: string; username: string }) {
-    console.log(`[joinWebrtcRoom] client=${client.id}, room=${payload.room}, user=${payload.username}`);
+  handleJoinWebrtcRoom(
+    client: Socket,
+    payload: { room: string; username: string },
+  ) {
+    console.log(
+      `[joinWebrtcRoom] client=${client.id}, room=${payload.room}, user=${payload.username}`,
+    );
     const { room, username } = payload;
     void client.join(room);
 
     // Если вдруг client.id уже есть - убираем прежнюю запись
-    this.rooms[room] = (this.rooms[room] || []).filter(u => u.id !== client.id);
+    this.rooms[room] = (this.rooms[room] || []).filter(
+      (u) => u.id !== client.id,
+    );
 
     client.to(room).emit('user-joined', { socketId: client.id, username });
     const existing = this.rooms[room].map((u) => ({
@@ -54,20 +63,26 @@ export class WebRtcGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.emit('existingUsers', existing);
 
     this.rooms[room].push({ id: client.id, username });
-    console.log(`[joinWebrtcRoom] now room=${room}, total=${this.rooms[room].length} users`);
+    console.log(
+      `[joinWebrtcRoom] now room=${room}, total=${this.rooms[room].length} users`,
+    );
   }
 
   @SubscribeMessage('webrtcSignal')
-  handleWebrtcSignal(client: Socket, payload: {
-    room: string;
-    from: string;
-    to: string;
-    signalData: any;
-  }) {
+  handleWebrtcSignal(
+    client: Socket,
+    payload: {
+      room: string;
+      from: string;
+      to: string;
+      signalData: any;
+    },
+  ) {
     console.log(
       `[webrtcSignal] from=${payload.from} to=${payload.to} in room=${payload.room}, signalType=${
-        payload.signalData?.sdp?.type || (payload.signalData?.candidate ? 'candidate' : 'unknown')
-      }`
+        payload.signalData?.sdp?.type ||
+        (payload.signalData?.candidate ? 'candidate' : 'unknown')
+      }`,
     );
     this.server.to(payload.to).emit('webrtcSignal', payload);
   }
@@ -76,7 +91,7 @@ export class WebRtcGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('requestRenegotiation')
   handleRequestRenegotiation(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { room: string; from: string; to: string }
+    @MessageBody() data: { room: string; from: string; to: string },
   ) {
     // Просто пересылаем "master, прошу оффер"
     this.server.to(data.to).emit('pleaseRenegotiate', data);
