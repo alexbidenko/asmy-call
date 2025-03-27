@@ -12,7 +12,6 @@
     >
       <!-- Локальное видео-превью -->
       <Teleport
-        v-if="!webrtcStore.localStream"
         defer
         to="#large-video-slot"
         :disabled="teleportedId !== 'local-video'"

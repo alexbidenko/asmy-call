@@ -54,6 +54,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     // 3) Остановить локальные треки (камера/микрофон)
     if (localStream.value) {
       localStream.value.getTracks().forEach(t => t.stop())
+      console.log(111);
       localStream.value = null
     }
   }
@@ -96,7 +97,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       memberStore.join({ id: data.socketId, username: data.username })
 
       const localActive = !!(localStream.value && localStream.value.getTracks().some(t => t.enabled))
-      const screenActive = !!(screenShareStore.stream && screenShareStore.stream.getTracks().some(t => t.readyState === 'live'))
+      const screenActive = screenShareStore.stream?.getTracks().some(t => t.readyState === 'live')
 
       if (localActive || screenActive) {
         if (mySocketId.value < data.socketId) {
