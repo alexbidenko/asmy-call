@@ -7,6 +7,9 @@ export interface ChatMessage {
 }
 
 export const useChatStore = defineStore('chat', () => {
+  const interfaceStore = useInterfaceStore();
+  const toast = useToast();
+
   // state
   const socket = ref<Socket | null>(null)
   const messages = ref<ChatMessage[]>([])
@@ -29,7 +32,17 @@ export const useChatStore = defineStore('chat', () => {
       messages.value = history
     })
     socket.value.on('newMessage', (msg: ChatMessage) => {
-      messages.value.push(msg)
+      messages.value.push(msg);
+
+      if (!interfaceStore.isChatVisible && msg.socketId !== socket.value?.id) {
+        toast.add({
+          group: 'message',
+          severity: 'secondary',
+          summary: msg.name,
+          detail: msg.text,
+          life: 5000,
+        })
+      }
     })
   }
 

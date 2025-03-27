@@ -126,6 +126,7 @@ const webrtcStore = useWebrtcStore()
 const deviceStore = useDeviceStore()
 const audioOutputStore = useAudioOutputStore();
 const screenShareStore = useScreenShareStore();
+const userStore = useUserStore();
 
 const micMenu = ref()
 const audioMenu = ref()
@@ -186,4 +187,10 @@ const exit = () => {
 
   router.push('/');
 };
+
+onMounted(() => {
+  if (!chatStore.socket || chatStore.room !== userStore.room) {
+    chatStore.initChat(userStore.room)
+  }
+});
 </script>

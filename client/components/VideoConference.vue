@@ -2,8 +2,6 @@
 import type { RemoteStreamObj } from '~/stores/webrtc'
 import type { MemberType } from '~/stores/member'
 
-const props = defineProps<{ room: string }>()
-
 const devicesStore = useDeviceStore()
 const webrtcStore = useWebrtcStore()
 const memberStore = useMemberStore()
@@ -13,8 +11,7 @@ const screenShareStore = useScreenShareStore();
 
 const teleportedId = ref('');
 
-const idsMap = reactive(new Map<string, string>());
-
+// TODO: было бы возможно хорошо создавать стрим под каждого пользователя даже без видео и аудио - тогда не будет проблем с количеством карточек и анимациями
 /**
  * Собираем список remoteStreams + username из memberStore
  */
@@ -24,32 +21,29 @@ const streams = computed(() => {
 
   // TODO: а тут вообще иногда проблемы с обновлением, если так не считать явно
   const remoteStreams = webrtcStore.remoteStreams;
-  remoteStreams.forEach((el) => {
-    let id: string;
-    if (idsMap.get(el.socketId) === el.id) {
-      id = el.socketId;
-    } else if (!idsMap.has(el.socketId)) {
-      idsMap.set(el.socketId, el.id);
-      id = el.socketId;
-    } else id = el.id;
 
-    map.set(id, {
-      ...el,
-      username:
-        memberStore.list.find((m) => m.id === el.socketId)?.username || 'Unknown',
-      staticId: id,
-    })
-  });
-
+  // TODO: осталось, что если отключить все стримы, то переход на пустое поле происходит не правильно
+  // TODO: А еще делать бы итерацию по участникам сначала и выводить карточки так, чтобы карточки одного участника были рядом - может тогда и остальное станет проще
   memberStore.list.forEach((el) => {
-    if (!remoteStreams.some((s) => s.socketId === el.id)) {
-      idsMap.delete(el.id);
-      map.set(el.id, { ...el, staticId: el.id });
-    }
+    const streams = remoteStreams.filter((s) => s.socketId === el.id);
+    streams.forEach((s) => {
+      map.set(s.id, {
+        ...s,
+        username: el.username,
+        staticId: s.id,
+      })
+    })
+
+    map.set(el.id, { ...el, staticId: el.id });
   });
 
-  idsMap.forEach((_, id) => {
-    if (!memberStore.list.some((el) => el.id === id)) idsMap.delete(id);
+  const unknownStreams = remoteStreams.filter((s) => !memberStore.list.some((m) => m.id === s.socketId));
+  unknownStreams.forEach((s) => {
+    map.set(s.id, {
+      ...s,
+      username: 'Unknown',
+      staticId: s.id,
+    })
   });
 
   return [...map.values()]
@@ -87,8 +81,8 @@ onMounted(async () => {
   await devicesStore.enumerateDevices()
 
   // Инициализируем сокет (если не был) и подключаемся к комнате
-  if (!webrtcStore.rtcSocket || webrtcStore.room !== props.room) {
-    webrtcStore.initSocket(props.room)
+  if (!webrtcStore.rtcSocket || webrtcStore.room !== userStore.room) {
+    webrtcStore.initSocket(userStore.room)
   }
   // Можно убрать setTimeout и сразу:
   webrtcStore.joinWebrtcRoom()
@@ -165,7 +159,7 @@ onMounted(async () => {
                 :video-ref="(el) => setRemoteRef(el, obj.id)"
                 :stream="obj.stream"
                 :opened="teleportedId === `stream-${obj.id}`"
-                :username="obj.staticId || obj.username || 'Unknown'"
+                :username="obj.username || 'TODO'"
                 :video="!!obj.video"
                 :audio="!!obj.audio"
               />

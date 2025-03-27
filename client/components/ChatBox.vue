@@ -1,3 +1,15 @@
+<script setup lang="ts">
+const chatStore = useChatStore()
+const text = ref('')
+
+function onSend() {
+  if (!text.value.trim()) return;
+
+  chatStore.sendMessage(text.value.trim())
+  text.value = '';
+}
+</script>
+
 <template>
   <div class="h-full flex flex-col">
     <div class="flex-1 overflow-auto">
@@ -31,22 +43,3 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-const props = defineProps<{ room: string }>()
-const chatStore = useChatStore()
-const text = ref('')
-
-onMounted(() => {
-  if (!chatStore.socket || chatStore.room !== props.room) {
-    chatStore.initChat(props.room)
-  }
-})
-
-function onSend() {
-  if (!text.value.trim()) return;
-
-  chatStore.sendMessage(text.value.trim())
-  text.value = '';
-}
-</script>

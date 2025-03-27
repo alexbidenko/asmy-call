@@ -104,7 +104,9 @@ function videoRefLocal(el: HTMLVideoElement) {
 }
 
 watch(stream, (v) => {
-  if (v) props.videoRef(localVideoEl.value)
+  // TODO: при прекращении стрима есть лаг с растягиванием видео
+  //  Надо бы делать последний кадр в canvas и анимировать красиво
+  if (v && localVideoEl.value) props.videoRef(localVideoEl.value)
 });
 
 watch([audio, stream], ([v, s]) => {

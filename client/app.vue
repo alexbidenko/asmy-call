@@ -16,4 +16,5 @@ const interfaceStore = useInterfaceStore();
   <NuxtPage />
 
   <Toast position="bottom-center" />
+  <Toast position="bottom-right" group="message" />
 </template>
