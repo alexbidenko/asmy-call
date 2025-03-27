@@ -28,10 +28,10 @@
           </template>
         </Button>
 
-        <Button @click="webrtcStore.isOutputOn = !webrtcStore.isOutputOn" rounded>
+        <Button @click="audioOutputStore.muted = !audioOutputStore.muted" rounded>
           <template #icon>
             <span class="material-icons-outlined">
-              {{ webrtcStore.isOutputOn ? 'volume_up' : 'volume_off' }}
+              {{ audioOutputStore.muted ? 'volume_off' : 'volume_up' }}
             </span>
           </template>
         </Button>
@@ -55,8 +55,8 @@
         </Button>
       </div>
 
-      <div class="flex gap-1 p-1 rounded-full" :class="webrtcStore.isScreenSharing ? 'bg-primary-600' : 'bg-primary-400'">
-        <Button @click="startShare" rounded>
+      <div class="flex gap-1 p-1 rounded-full" :class="screenShareStore.enabled ? 'bg-primary-600' : 'bg-primary-400'">
+        <Button @click="screenShareStore.start" rounded>
           <template #icon>
             <span class="material-icons-outlined">
               screen_share
@@ -64,7 +64,7 @@
           </template>
         </Button>
 
-        <Button v-if="webrtcStore.isScreenSharing" @click="stopShare" rounded>
+        <Button v-if="screenShareStore.enabled" @click="screenShareStore.stop" rounded>
           <template #icon>
             <span class="material-icons-outlined">
               stop_screen_share
@@ -124,33 +124,12 @@ const interfaceStore = useInterfaceStore()
 const chatStore = useChatStore()
 const webrtcStore = useWebrtcStore()
 const deviceStore = useDeviceStore()
+const audioOutputStore = useAudioOutputStore();
+const screenShareStore = useScreenShareStore();
 
 const micMenu = ref()
 const audioMenu = ref()
 const videoMenu = ref()
-
-/**
- * Выбираем новое устройство вывода -> обновляем sinkId у локального и всех remote video
- */
-const onOutputChange = () => {
-  if (webrtcStore.localVideo) {
-    setSink(webrtcStore.localVideo, deviceStore.selectedAudioOutput)
-  }
-  webrtcStore.remoteStreams.forEach((obj) => {
-    const videoEl = document.getElementById('video-' + obj.id) as HTMLVideoElement
-    if (videoEl) setSink(videoEl, deviceStore.selectedAudioOutput)
-  })
-  deviceStore.saveToStorage()
-};
-
-// Настройка sinkId
-function setSink(el: HTMLVideoElement, sinkId: string) {
-  if (typeof el.sinkId !== 'undefined' && sinkId !== 'default') {
-    el.setSinkId(sinkId).catch((err) => {
-      console.warn('Error setting sinkId:', err)
-    })
-  }
-}
 
 // Списки устройств (микрофоны, колонки, камеры)
 const micItems = computed<MenuItem[]>(() =>
@@ -160,7 +139,8 @@ const micItems = computed<MenuItem[]>(() =>
       deviceStore.selectedAudioInput = dev.deviceId
       // После смены микрофона — пересоздаём стрим
       webrtcStore.startOrUpdateStream()
-    }
+    },
+    class: deviceStore.selectedAudioInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
 )
 
@@ -169,8 +149,8 @@ const audioItems = computed<MenuItem[]>(() =>
     label: dev.label,
     command: () => {
       deviceStore.selectedAudioOutput = dev.deviceId
-      onOutputChange()
-    }
+    },
+    class: deviceStore.selectedAudioOutput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
 )
 
@@ -181,7 +161,8 @@ const videoItems = computed<MenuItem[]>(() =>
       deviceStore.selectedVideoInput = dev.deviceId
       // После смены камеры — пересоздаём стрим
       webrtcStore.startOrUpdateStream()
-    }
+    },
+    class: deviceStore.selectedVideoInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
 )
 
@@ -194,19 +175,15 @@ function toggleCam() {
   webrtcStore.toggleCam(!webrtcStore.isCamOn)
 }
 
-// Шеринг экрана
-function startShare() {
-  webrtcStore.startScreenShare()
-}
-function stopShare() {
-  webrtcStore.stopScreenShare()
-}
-
 const exit = () => {
   chatStore.disconnect();
   chatStore.$dispose();
   webrtcStore.disconnect();
   webrtcStore.$dispose();
+  audioOutputStore.$dispose();
+  screenShareStore.disconnect();
+  screenShareStore.$dispose();
+
   router.push('/');
 };
 </script>

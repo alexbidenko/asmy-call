@@ -4,15 +4,15 @@ const interfaceStore = useInterfaceStore();
 const themeOptions = computed(() => [
   {
     label: 'Темная',
-    value: ThemeEnum.dark,
+    value: ThemeModeEnum.dark,
   },
   {
     label: 'Светлая',
-    value: ThemeEnum.light,
+    value: ThemeModeEnum.light,
   },
   {
     label: 'Системная',
-    value: ThemeEnum.system,
+    value: ThemeModeEnum.system,
   },
 ]);
 </script>

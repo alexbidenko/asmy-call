@@ -12,8 +12,9 @@
     >
       <!-- Локальное видео-превью -->
       <Teleport
-        v-if="!webrtcStore.screenStream || webrtcStore.localStream"
-        defer to="#large-video-slot"
+        v-if="!screenShareStore.stream || webrtcStore.localStream"
+        defer
+        to="#large-video-slot"
         :disabled="teleportedId !== 'local-video'"
       >
         <VideoItem
@@ -28,11 +29,11 @@
           muted
         />
       </Teleport>
-      <Teleport v-if="webrtcStore.screenStream" defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
+      <Teleport v-if="screenShareStore.stream" defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
         <VideoItem
           @teleport="toggleTeleportId"
-          :video-ref="(el) => (webrtcStore.localScreen = el)"
-          :stream="webrtcStore.screenStream"
+          :video-ref="(el) => (screenShareStore.element = el)"
+          :stream="screenShareStore.stream"
           stream-id="local-screen"
           :opened="teleportedId === 'local-screen'"
           :username="userStore.username"
@@ -47,7 +48,6 @@
           :video-ref="(el) => setRemoteRef(el, obj.id)"
           :stream="obj.stream"
           :stream-id="`stream-${obj.id}`"
-          :muted="!webrtcStore.isOutputOn"
           :opened="teleportedId === `stream-${obj.id}`"
           :username="obj.username || 'Unknown'"
           :video="!!obj.video"
@@ -69,6 +69,7 @@ const webrtcStore = useWebrtcStore()
 const memberStore = useMemberStore()
 const userStore = useUserStore()
 const interfaceStore = useInterfaceStore()
+const screenShareStore = useScreenShareStore();
 
 const teleportedId = ref('');
 
@@ -107,22 +108,12 @@ function setRemoteRef(el: HTMLVideoElement | null, streamId: string) {
   if (found) {
     el.srcObject = found.stream
     el.id = 'video-' + streamId
-    setSink(el, devicesStore.selectedAudioOutput)
   }
 }
 
-// Настройка аудиовыхода (sinkId)
-function setSink(el: HTMLVideoElement, sinkId: string) {
-  if (typeof el.sinkId !== 'undefined' && sinkId !== 'default') {
-    el.setSinkId(sinkId).catch((err: any) => {
-      console.warn('Error setting sinkId:', err)
-    })
-  }
-}
-
-watch([() => webrtcStore.localStream, () => webrtcStore.screenStream, () => webrtcStore.remoteStreams], () => {
+watch([() => webrtcStore.localStream, () => screenShareStore.stream, () => webrtcStore.remoteStreams], () => {
   if (teleportedId.value === 'local-video' && !webrtcStore.localStream) teleportedId.value = '';
-  else if (teleportedId.value === 'local-screen' && !webrtcStore.screenStream) teleportedId.value = '';
+  else if (teleportedId.value === 'local-screen' && !screenShareStore.stream) teleportedId.value = '';
   else if (
     teleportedId.value.startsWith('stream-') &&
     !webrtcStore.remoteStreams.find((r) => `stream-${r.id}` === teleportedId.value)

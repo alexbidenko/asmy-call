@@ -3,7 +3,7 @@ const interfaceStore = useInterfaceStore();
 </script>
 
 <template>
-  <Html lang="ru" class="h-full" :data-theme="interfaceStore.theme" />
+  <Html lang="ru" class="h-full" :class="`theme-${interfaceStore.theme}`" />
   <Head>
     <Title>Asmy Call</Title>
   </Head>

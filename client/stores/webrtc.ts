@@ -9,6 +9,8 @@ export interface RemoteStreamObj {
 }
 
 export const useWebrtcStore = defineStore('webrtc', () => {
+  const screenShareStore = useScreenShareStore();
+
   // -------------------
   // State (Composition API refs)
   // -------------------
@@ -18,20 +20,16 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const localStream = ref<MediaStream | null>(null)
   const remoteStreams = ref<RemoteStreamObj[]>([])
   const peerConnections = ref<Record<string, RTCPeerConnection>>({})
-  const screenStream = ref<MediaStream | null>(null)
-  const isScreenSharing = ref(false)
 
   // Контролы
   const isMicOn = ref(false)
   const isCamOn = ref(false)
-  const isOutputOn = ref(true)
 
   const previousAudioConstraints = ref<any>(null)
   const previousVideoConstraints = ref<any>(null)
 
   // У нас в UI <video ref="localVideo" />
   const localVideo = ref<HTMLVideoElement | null>(null)
-  const localScreen = ref<HTMLVideoElement | null>(null)
 
   // На каждого удалённого: (mic / sysAudio / cam / screen)
   const transceivers = ref<Record<string, RTCPeerConnection>>({})
@@ -58,13 +56,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       localStream.value.getTracks().forEach(t => t.stop())
       localStream.value = null
     }
-
-    // 4) Остановить трансляцию экрана, если запущена
-    if (screenStream.value) {
-      screenStream.value.getTracks().forEach(t => t.stop())
-      screenStream.value = null
-    }
-    isScreenSharing.value = false
   }
 
   // --------------------------------------------------
@@ -105,7 +96,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       memberStore.join({ id: data.socketId, username: data.username })
 
       const localActive = !!(localStream.value && localStream.value.getTracks().some(t => t.enabled))
-      const screenActive = !!(screenStream.value && screenStream.value.getTracks().some(t => t.readyState === 'live'))
+      const screenActive = !!(screenShareStore.stream && screenShareStore.stream.getTracks().some(t => t.readyState === 'live'))
 
       if (localActive || screenActive) {
         if (mySocketId.value < data.socketId) {
@@ -230,10 +221,10 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         }
       })
     }
-    if (isScreenSharing.value && screenStream.value) {
-      screenStream.value.getTracks().forEach(track => {
+    if (screenShareStore.stream) {
+      screenShareStore.stream.getTracks().forEach(track => {
         if (track.readyState === 'live') {
-          pc.addTrack(track, screenStream.value!)
+          pc.addTrack(track, screenShareStore.stream!)
         }
       })
     }
@@ -532,132 +523,95 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       devicesStore.selectedAudioInput,
       devicesStore.selectedVideoInput
     )
-    devicesStore.saveToStorage()
 
     nextTick(() => {
       if (localVideo.value && localStream.value) {
         localVideo.value.srcObject = localStream.value
       }
     })
-  }
+  };
 
-  // --------------------------------------------------
-  // Шеринг экрана
-  // --------------------------------------------------
-  const startScreenShare = async () => {
-    if (isScreenSharing.value) return
+  watch(() => screenShareStore.stream, async (screen, prev) => {
+    let didOffer = false;
 
-    const screen = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: true
-    })
-
-    stopScreenShare()
-    screenStream.value = screen
-    isScreenSharing.value = true
-
-    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
-      if (pc.signalingState === 'closed') {
-        console.log(`[startScreenShare] skip PC ${remoteId}, because signalingState=closed`)
-        continue
-      }
-
-      const sVid = screen.getVideoTracks()[0] || null
-      if (sVid) {
-        try {
-          senders.value.audioTx2 = pc.addTrack(sVid, screen)
-        } catch (err) {
-          console.warn(`[startScreenShare] addTrack (video) failed:`, err)
+    if (screen) {
+      for (const [remoteId, pc] of Object.entries(transceivers.value)) {
+        if (pc.signalingState === 'closed') {
+          console.log(`[startScreenShare] skip PC ${remoteId}, because signalingState=closed`)
+          continue
         }
-      }
-      const sAud = screen.getAudioTracks()[0] || null
-      if (sAud) {
-        try {
-          senders.value.videoTx2 = pc.addTrack(sAud, screen)
-        } catch (err) {
-          console.warn(`[startScreenShare] addTrack (audio) failed:`, err)
-        }
-      }
-    }
 
-    const vidTrack = screen.getVideoTracks()[0]
-    if (vidTrack) {
-      vidTrack.onended = () => {
-        stopScreenShare()
-      }
-    }
-
-    nextTick(() => {
-      if (localScreen.value && screenStream.value) {
-        localScreen.value.srcObject = screenStream.value
-      }
-    })
-
-    await slaveForceOffer()
-  }
-
-  const stopScreenShare = async () => {
-    if (!isScreenSharing.value || !screenStream.value) return
-
-    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
-      if (pc.signalingState === 'closed') {
-        console.log('[stopScreenShare] skip closed PC remoteId=', remoteId)
-        continue
-      }
-      const sendersList = pc.getSenders()
-      screenStream.value.getTracks().forEach((track) => {
-        const sender = sendersList.find(s => s.track === track)
-        if (sender) {
+        const sVid = screen.getVideoTracks()[0] || null
+        if (sVid) {
           try {
-            pc.removeTrack(sender)
+            senders.value.audioTx2 = pc.addTrack(sVid, screen)
           } catch (err) {
-            console.warn('[stopScreenShare] removeTrack fail:', err)
+            console.warn(`[startScreenShare] addTrack (video) failed:`, err)
           }
         }
-      })
-    }
-
-    screenStream.value.getTracks().forEach((t) => t.stop())
-    screenStream.value = null
-    isScreenSharing.value = false
-
-    let didOffer = false
-    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
-      if (pc.signalingState === 'closed') continue
-      if (mySocketId.value < remoteId) {
-        if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
-          negotiationInProgress.value = true
-          console.log('[stopScreenShare] master => doOffer to', remoteId)
+        const sAud = screen.getAudioTracks()[0] || null
+        if (sAud) {
           try {
-            await doOffer(pc, remoteId)
-          } finally {
-            negotiationInProgress.value = false
+            senders.value.videoTx2 = pc.addTrack(sAud, screen)
+          } catch (err) {
+            console.warn(`[startScreenShare] addTrack (audio) failed:`, err)
           }
         }
-        didOffer = true
+      }
+
+      didOffer = true;
+    } else {
+      if (prev) {
+        for (const [remoteId, pc] of Object.entries(transceivers.value)) {
+          if (pc.signalingState === 'closed') {
+            console.log('[stopScreenShare] skip closed PC remoteId=', remoteId)
+            continue
+          }
+          const sendersList = pc.getSenders()
+          prev.getTracks().forEach((track) => {
+            const sender = sendersList.find(s => s.track === track)
+            if (sender) {
+              try {
+                pc.removeTrack(sender)
+              } catch (err) {
+                console.warn('[stopScreenShare] removeTrack fail:', err)
+              }
+            }
+          })
+        }
+      }
+
+      for (const [remoteId, pc] of Object.entries(transceivers.value)) {
+        if (pc.signalingState === 'closed') continue
+        if (mySocketId.value < remoteId) {
+          if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
+            negotiationInProgress.value = true
+            console.log('[stopScreenShare] master => doOffer to', remoteId)
+            try {
+              await doOffer(pc, remoteId)
+            } finally {
+              negotiationInProgress.value = false
+            }
+          }
+          didOffer = true
+        }
       }
     }
+
     if (!didOffer) {
-      console.log('[stopScreenShare] => slaveForceOffer()')
+      console.log('[updateScreenShare] => slaveForceOffer()')
       await slaveForceOffer()
     }
-  }
+  });
 
-  // -------------------
-  // Return all state + actions
-  // -------------------
   return {
     rtcSocket,
     room,
     localStream,
     remoteStreams,
-    screenStream,
-    isScreenSharing,
     isMicOn,
     isCamOn,
-    isOutputOn,
     localVideo,
-    localScreen,
 
     disconnect,
     initSocket,
@@ -665,7 +619,5 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     toggleMic,
     toggleCam,
     startOrUpdateStream,
-    startScreenShare,
-    stopScreenShare,
   }
 });

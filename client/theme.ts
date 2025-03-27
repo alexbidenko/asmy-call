@@ -35,6 +35,6 @@ const preset = definePreset(Aura, {
 export default {
   preset,
   options: {
-    darkModeSelector: '[data-theme=dark]',
+    darkModeSelector: '.theme-dark',
   },
 };

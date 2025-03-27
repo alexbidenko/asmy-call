@@ -1,10 +1,20 @@
-export enum ThemeEnum {
+export enum ThemeModeEnum {
   dark = 'dark',
   light = 'light',
   system = 'system',
 }
 
+export enum ThemeEnum {
+  dark = 'dark',
+  light = 'light',
+}
+
 const THEME_KEY = 'application_theme';
+
+const getSystemTheme = () => {
+  const darkMq = window.matchMedia('(prefers-color-scheme: dark)')
+  return darkMq.matches ? ThemeEnum.dark : ThemeEnum.light;
+};
 
 export const useInterfaceStore = defineStore('interface', () => {
   const isChatVisible = ref(false);
@@ -17,13 +27,10 @@ export const useInterfaceStore = defineStore('interface', () => {
     const prev = localStorage.getItem(THEME_KEY);
     if (prev) return prev;
 
-    return ThemeEnum.system;
+    return ThemeModeEnum.system;
   });
   const theme = useState('theme', () => {
-    if (themeMode.value === ThemeEnum.system) {
-      const darkMq = window.matchMedia('(prefers-color-scheme: dark)')
-      return darkMq.matches ? ThemeEnum.dark : ThemeEnum.light;
-    }
+    if (themeMode.value === ThemeModeEnum.system) return getSystemTheme();
 
     return themeMode.value;
   });
@@ -37,20 +44,14 @@ export const useInterfaceStore = defineStore('interface', () => {
   watch(themeMode, (v) => {
     localStorage.setItem(THEME_KEY, v);
 
-    if (themeMode.value === ThemeEnum.system) {
-      const darkMq = window.matchMedia('(prefers-color-scheme: dark)')
-      theme.value = darkMq.matches ? ThemeEnum.dark : ThemeEnum.light;
-    } else theme.value = themeMode.value;
+    theme.value = themeMode.value === ThemeModeEnum.system ? getSystemTheme() : themeMode.value;
   });
 
   onMounted(() => {
     const mql = window.matchMedia('(prefers-color-scheme: dark)')
     mql.addEventListener('change', () => {
-      if (themeMode.value === 'system') {
-        const darkMq = window.matchMedia('(prefers-color-scheme: dark)')
-        theme.value = darkMq.matches ? ThemeEnum.dark : ThemeEnum.light;
-      }
-    })
+      if (themeMode.value === 'system') theme.value = getSystemTheme();
+    });
   });
 
   return {

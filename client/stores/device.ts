@@ -13,6 +13,38 @@ export const useDeviceStore = defineStore('device', () => {
   const selectedAudioOutput = ref('default')
   const selectedVideoInput = ref('default')
 
+  // Новая функция: проверяет, если выбранное устройство недоступно – переключает на "default"
+  const checkSelectedDevices = () => {
+    let changed = false
+
+    if (
+      selectedAudioInput.value !== 'default' &&
+      !audioInputs.value.some((d) => d.deviceId === selectedAudioInput.value)
+    ) {
+      selectedAudioInput.value = 'default'
+      changed = true
+    }
+    if (
+      selectedAudioOutput.value !== 'default' &&
+      !audioOutputs.value.some((d) => d.deviceId === selectedAudioOutput.value)
+    ) {
+      selectedAudioOutput.value = 'default'
+      changed = true
+    }
+    if (
+      selectedVideoInput.value !== 'default' &&
+      !videoInputs.value.some((d) => d.deviceId === selectedVideoInput.value)
+    ) {
+      selectedVideoInput.value = 'default'
+      changed = true
+    }
+
+    if (changed) {
+      // Обновляем локальный поток в WebRTC-сторе, чтобы новые устройства использовались
+      useWebrtcStore().startOrUpdateStream()
+    }
+  }
+
   const enumerateDevices = async () => {
     const devices = await navigator.mediaDevices.enumerateDevices()
     audioInputs.value = []
@@ -30,8 +62,11 @@ export const useDeviceStore = defineStore('device', () => {
         if (d.kind === 'audiooutput') audioOutputs.value.push(info)
         if (d.kind === 'videoinput') videoInputs.value.push(info)
       }
-    })
-  }
+    });
+
+    // Проверяем, доступны ли выбранные устройства
+    checkSelectedDevices()
+  };
 
   const loadFromStorage = () => {
     const aIn = localStorage.getItem('selAudioIn')
@@ -40,13 +75,11 @@ export const useDeviceStore = defineStore('device', () => {
     if (aIn) selectedAudioInput.value = aIn
     if (aOut) selectedAudioOutput.value = aOut
     if (vIn) selectedVideoInput.value = vIn
-  }
+  };
 
-  const saveToStorage = () => {
-    localStorage.setItem('selAudioIn', selectedAudioInput.value)
-    localStorage.setItem('selAudioOut', selectedAudioOutput.value)
-    localStorage.setItem('selVideoIn', selectedVideoInput.value)
-  }
+  watch(selectedAudioInput, (v) => localStorage.setItem('selAudioIn', v));
+  watch(selectedAudioOutput, (v) => localStorage.setItem('selAudioOut', v));
+  watch(selectedVideoInput, (v) => localStorage.setItem('selVideoIn', v));
 
   // Возвращаем всё, что нужно
   return {
@@ -59,6 +92,5 @@ export const useDeviceStore = defineStore('device', () => {
 
     enumerateDevices,
     loadFromStorage,
-    saveToStorage
   }
 })

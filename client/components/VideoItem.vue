@@ -12,6 +12,7 @@
       @click="$emit('teleport', streamId)"
       autoplay
       playsinline
+      :muted="audioOutputStore.muted"
       class="bg-black h-full w-full object-contain object-center"
       v-bind="$attrs"
     />
@@ -67,6 +68,10 @@ defineEmits<{
   (event: 'teleport', streamId: string): void;
 }>();
 defineOptions({ inheritAttrs: false });
+
+const { audio, stream } = toRefs(props);
+
+const audioOutputStore = useAudioOutputStore();
 
 // Вычисляем буквы для заглушки (Avatar)
 const label = computed(() => {
@@ -152,19 +157,25 @@ const localVideoEl = ref<HTMLVideoElement|null>(null)
 // Юзер вам передаёт prop: videoRef – колбэк.
 // Вы можете в нём также сохранить себе локально ссылку.
 function videoRefLocal(el: HTMLVideoElement) {
+  if (el === localVideoEl.value) return;
+
   props.videoRef(el)  // чтобы внешний код тоже работал
   localVideoEl.value = el
 }
 
-watch(() => props.audio, (v) => {
-  if (!localVideoEl.value) return;
+watch([audio, stream], ([v, s]) => {
+  if (v && s) {
+    setupAudioAnalyser(s);
 
-  // Настраиваем аудио-анализ только если audio===true
-  if (v) {
-    setTimeout(() => {
-      if (props.stream) setupAudioAnalyser(props.stream)
-      // TODO: подумать бы над условием получше
-    }, 500);
+    s.addEventListener('addtrack', () => {
+      if (s.getAudioTracks().length) setupAudioAnalyser(s);
+      else cleanupAudioAnalyser();
+    });
+
+    s.addEventListener('removetrack', () => {
+      if (s.getAudioTracks().length) setupAudioAnalyser(s);
+      else cleanupAudioAnalyser();
+    });
   } else {
     // audio=false или srcObject=null => глушим
     cleanupAudioAnalyser()
@@ -183,5 +194,13 @@ const visualizerStyle = computed(() => {
     transformOrigin: 'bottom',
     transform: `scaleY(${ amplitude.value })`,
   }
-})
+});
+
+watch(localVideoEl, (el) => {
+  if (el) audioOutputStore.register(el);
+});
+
+onBeforeUnmount(() => {
+  if (localVideoEl.value) audioOutputStore.dispose(localVideoEl.value);
+});
 </script>
