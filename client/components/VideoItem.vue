@@ -9,7 +9,6 @@
     <video
       v-show="video"
       :ref="(el) => videoRefLocal(el as HTMLVideoElement)"
-      @click="$emit('teleport', streamId)"
       autoplay
       playsinline
       :muted="audioOutputStore.muted"
@@ -63,9 +62,6 @@ const props = defineProps<{
   video?: boolean;
   audio?: boolean;
   opened?: boolean;
-}>()
-defineEmits<{
-  (event: 'teleport', streamId: string): void;
 }>();
 defineOptions({ inheritAttrs: false });
 

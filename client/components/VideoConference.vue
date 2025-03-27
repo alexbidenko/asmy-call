@@ -12,13 +12,14 @@
     >
       <!-- Локальное видео-превью -->
       <Teleport
-        v-if="!screenShareStore.stream || webrtcStore.localStream"
+        v-if="!webrtcStore.localStream"
         defer
         to="#large-video-slot"
         :disabled="teleportedId !== 'local-video'"
       >
         <VideoItem
-          @teleport="toggleTeleportId"
+          key="local-video"
+          @click="toggleTeleportId('local-video')"
           :video-ref="(el) => (webrtcStore.localVideo = el)"
           :stream="webrtcStore.localStream"
           stream-id="local-video"
@@ -31,7 +32,8 @@
       </Teleport>
       <Teleport v-if="screenShareStore.stream" defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
         <VideoItem
-          @teleport="toggleTeleportId"
+          key="local-screen"
+          @click="toggleTeleportId('local-screen')"
           :video-ref="(el) => (screenShareStore.element = el)"
           :stream="screenShareStore.stream"
           stream-id="local-screen"
@@ -44,7 +46,8 @@
 
       <Teleport v-for="obj in streams" :key="obj.id" defer to="#large-video-slot" :disabled="teleportedId !== `stream-${obj.id}`">
         <VideoItem
-          @teleport="toggleTeleportId"
+          :key="`stream-${obj.id}`"
+          @click="toggleTeleportId(`stream-${obj.id}`)"
           :video-ref="(el) => setRemoteRef(el, obj.id)"
           :stream="obj.stream"
           :stream-id="`stream-${obj.id}`"
