@@ -1,20 +1,6 @@
 <script setup lang="ts">
 const userStore = useUserStore();
 const interfaceStore = useInterfaceStore();
-const deviceStore = useDeviceStore();
-
-const handleDeviceChange = async () => {
-  await deviceStore.enumerateDevices();
-  console.log('[devicechange] Updated list of devices');
-};
-
-onMounted(() => {
-  navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
-});
-
-onBeforeUnmount(() => {
-  navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
-});
 
 definePageMeta({
   validate: (route) => (
@@ -29,7 +15,7 @@ definePageMeta({
   <div v-else-if="!userStore.initialized" class="h-full flex justify-center items-center">
     <Button @click="userStore.initialize" label="Присоединиться" size="large" text />
   </div>
-  <div v-else class="h-full flex flex-col">
+  <RoomWrapper v-else class="h-full flex flex-col">
     <Splitter
       class="flex-1 !rounded-none overflow-hidden relative"
       state-storage="local"
@@ -52,5 +38,5 @@ definePageMeta({
     <ControlPanel class="mt-auto" />
 
     <SettingDialog />
-  </div>
+  </RoomWrapper>
 </template>

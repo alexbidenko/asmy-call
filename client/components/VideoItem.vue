@@ -111,7 +111,8 @@ watch(stream, (v) => {
 
 watch([audio, stream], ([v, s]) => {
   if (v && s) {
-    setupAudioAnalyser(s);
+    if (s.getAudioTracks().length) setupAudioAnalyser(s);
+    else cleanupAudioAnalyser();
 
     s.addEventListener('addtrack', () => {
       if (s.getAudioTracks().length) setupAudioAnalyser(s);

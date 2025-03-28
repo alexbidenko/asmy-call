@@ -24,7 +24,7 @@ export const useAudioOutputStore = defineStore('audio_output', () => {
 
   watch(() => deviceStore.selectedAudioOutput, () => {
     sources.forEach(setup);
-  }, { immediate: true });
+  });
 
   return {
     muted,

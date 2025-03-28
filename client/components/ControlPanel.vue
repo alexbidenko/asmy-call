@@ -1,3 +1,62 @@
+<script setup lang="ts">
+import type { MenuItem } from 'primevue/menuitem'
+
+const interfaceStore = useInterfaceStore()
+const webrtcStore = useWebrtcStore()
+const deviceStore = useDeviceStore()
+const audioOutputStore = useAudioOutputStore();
+const screenShareStore = useScreenShareStore();
+const roomStore = useRoomStore();
+
+const micMenu = ref()
+const audioMenu = ref()
+const videoMenu = ref()
+
+// Списки устройств (микрофоны, колонки, камеры)
+const micItems = computed<MenuItem[]>(() =>
+  deviceStore.audioInputs.map((dev) => ({
+    label: dev.label,
+    command: () => {
+      deviceStore.selectedAudioInput = dev.deviceId
+      // После смены микрофона — пересоздаём стрим
+      webrtcStore.startOrUpdateStream()
+    },
+    class: deviceStore.selectedAudioInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
+  }))
+)
+
+const audioItems = computed<MenuItem[]>(() =>
+  deviceStore.audioOutputs.map((dev) => ({
+    label: dev.label,
+    command: () => {
+      deviceStore.selectedAudioOutput = dev.deviceId
+    },
+    class: deviceStore.selectedAudioOutput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
+  }))
+)
+
+const videoItems = computed<MenuItem[]>(() =>
+  deviceStore.videoInputs.map((dev) => ({
+    label: dev.label,
+    command: () => {
+      deviceStore.selectedVideoInput = dev.deviceId
+      // После смены камеры — пересоздаём стрим
+      webrtcStore.startOrUpdateStream()
+    },
+    class: deviceStore.selectedVideoInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
+  }))
+)
+
+// Тогглы микрофона/камеры – просто вызывают toggleMic / toggleCam
+function toggleMic() {
+  webrtcStore.toggleMic(!webrtcStore.isMicOn)
+}
+
+function toggleCam() {
+  webrtcStore.toggleCam(!webrtcStore.isCamOn)
+}
+</script>
+
 <template>
   <div class="bg-surface-100 dark:bg-surface-800 overflow-auto">
     <div class="flex justify-center gap-2 py-2 px-4 w-fit mx-auto">
@@ -104,7 +163,7 @@
       </div>
 
       <div class="flex gap-1 p-1 rounded-full bg-primary-400">
-        <Button @click="exit" rounded>
+        <Button @click="roomStore.exit" rounded>
           <template #icon>
             <span class="material-icons-outlined text-red-500 dark:text-red-600">
               phone_disabled
@@ -115,82 +174,3 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import type { MenuItem } from 'primevue/menuitem'
-
-const router = useRouter();
-const interfaceStore = useInterfaceStore()
-const chatStore = useChatStore()
-const webrtcStore = useWebrtcStore()
-const deviceStore = useDeviceStore()
-const audioOutputStore = useAudioOutputStore();
-const screenShareStore = useScreenShareStore();
-const userStore = useUserStore();
-
-const micMenu = ref()
-const audioMenu = ref()
-const videoMenu = ref()
-
-// Списки устройств (микрофоны, колонки, камеры)
-const micItems = computed<MenuItem[]>(() =>
-  deviceStore.audioInputs.map((dev) => ({
-    label: dev.label,
-    command: () => {
-      deviceStore.selectedAudioInput = dev.deviceId
-      // После смены микрофона — пересоздаём стрим
-      webrtcStore.startOrUpdateStream()
-    },
-    class: deviceStore.selectedAudioInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
-  }))
-)
-
-const audioItems = computed<MenuItem[]>(() =>
-  deviceStore.audioOutputs.map((dev) => ({
-    label: dev.label,
-    command: () => {
-      deviceStore.selectedAudioOutput = dev.deviceId
-    },
-    class: deviceStore.selectedAudioOutput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
-  }))
-)
-
-const videoItems = computed<MenuItem[]>(() =>
-  deviceStore.videoInputs.map((dev) => ({
-    label: dev.label,
-    command: () => {
-      deviceStore.selectedVideoInput = dev.deviceId
-      // После смены камеры — пересоздаём стрим
-      webrtcStore.startOrUpdateStream()
-    },
-    class: deviceStore.selectedVideoInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
-  }))
-)
-
-// Тогглы микрофона/камеры – просто вызывают toggleMic / toggleCam
-function toggleMic() {
-  webrtcStore.toggleMic(!webrtcStore.isMicOn)
-}
-
-function toggleCam() {
-  webrtcStore.toggleCam(!webrtcStore.isCamOn)
-}
-
-const exit = () => {
-  chatStore.disconnect();
-  chatStore.$dispose();
-  webrtcStore.disconnect();
-  webrtcStore.$dispose();
-  audioOutputStore.$dispose();
-  screenShareStore.disconnect();
-  screenShareStore.$dispose();
-
-  router.push('/');
-};
-
-onMounted(() => {
-  if (!chatStore.socket || chatStore.room !== userStore.room) {
-    chatStore.initChat(userStore.room)
-  }
-});
-</script>

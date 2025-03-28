@@ -12,7 +12,11 @@ export const useMemberStore = defineStore('member', () => {
 
   const leave = (id: string) => {
     list.value = list.value.filter((m) => m.id !== id);
-  }
+  };
+
+  onBeforeUnmount(() => {
+    list.value = [];
+  });
 
   return { list, join, leave };
 });

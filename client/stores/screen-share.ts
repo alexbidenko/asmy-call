@@ -4,14 +4,6 @@ export const useScreenShareStore = defineStore('screen_share', () => {
 
   const enabled = computed(() => !!stream.value);
 
-  const disconnect = () => {
-    // 4) Остановить трансляцию экрана, если запущена
-    if (stream.value) {
-      stream.value.getTracks().forEach((t) => t.stop())
-      stream.value = null
-    }
-  };
-
   const stop = () => {
     if (!stream.value) return;
 
@@ -36,7 +28,15 @@ export const useScreenShareStore = defineStore('screen_share', () => {
         element.value.srcObject = stream.value;
       }
     });
-  }
+  };
+
+  onBeforeUnmount(() => {
+    // 4) Остановить трансляцию экрана, если запущена
+    if (stream.value) {
+      stream.value.getTracks().forEach((t) => t.stop())
+      stream.value = null
+    }
+  });
 
   return {
     stream,
@@ -45,6 +45,5 @@ export const useScreenShareStore = defineStore('screen_share', () => {
 
     start,
     stop,
-    disconnect,
   };
 });

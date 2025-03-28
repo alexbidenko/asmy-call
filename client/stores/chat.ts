@@ -57,9 +57,9 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
-  const disconnect = () => {
+  onBeforeUnmount(() => {
     socket.value?.disconnect()
-  }
+  });
 
   // expose
   return {
@@ -69,6 +69,5 @@ export const useChatStore = defineStore('chat', () => {
 
     initChat,
     sendMessage,
-    disconnect,
   }
 });

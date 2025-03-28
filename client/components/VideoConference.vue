@@ -2,6 +2,7 @@
 import type { RemoteStreamObj } from '~/stores/webrtc'
 import type { MemberType } from '~/stores/member'
 
+const roomStore = useRoomStore();
 const devicesStore = useDeviceStore()
 const webrtcStore = useWebrtcStore()
 const memberStore = useMemberStore()
@@ -74,23 +75,6 @@ watch([() => webrtcStore.localStream, () => screenShareStore.stream, () => webrt
 watch(teleportedId, (v) => {
   interfaceStore.isLargeVideoVisible = !!v;
 }, { immediate: true });
-
-onMounted(async () => {
-  // Считываем сохранённые выборы устройств
-  devicesStore.loadFromStorage()
-  await devicesStore.enumerateDevices()
-
-  // Инициализируем сокет (если не был) и подключаемся к комнате
-  if (!webrtcStore.rtcSocket || webrtcStore.room !== userStore.room) {
-    webrtcStore.initSocket(userStore.room)
-  }
-  // Можно убрать setTimeout и сразу:
-  webrtcStore.joinWebrtcRoom()
-
-  // Запускаем локальный стрим (камера/микрофон) — если хотим "автоматически"
-  // (если user сам потом включает кнопкой, можно убрать эту строку)
-  webrtcStore.startOrUpdateStream()
-})
 </script>
 
 <template>

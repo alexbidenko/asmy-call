@@ -1,13 +1,10 @@
 export const useUserStore = defineStore('user', () => {
-  const route = useRoute();
   const toast = useToast();
 
   const username = ref(localStorage.getItem('username') || '');
   const initialized = ref(false);
 
   const ready = computed(() => !!username.value.trim());
-
-  const room = computed(() => typeof route.params.room === 'string' ? route.params.room : '');
 
   const initialize = async () => {
     const permissionStatus = await navigator.permissions.query({ name: 'microphone' })
@@ -40,5 +37,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('username', v);
   });
 
-  return { username, initialized, ready, room, initialize };
+  return { username, initialized, ready, initialize };
 });

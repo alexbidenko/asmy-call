@@ -38,26 +38,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const remoteTracks = ref<string[]>([])
   const negotiationInProgress = ref(false)
 
-  // -------------------
-  // Actions (arrow functions)
-  // -------------------
-
-  const disconnect = () => {
-    rtcSocket.value?.disconnect()
-    rtcSocket.value = null
-
-    // 2) Закрыть все PeerConnections
-    for (const pcObj of Object.values(peerConnections.value)) {
-      pcObj.close()
-    }
-
-    // 3) Остановить локальные треки (камера/микрофон)
-    if (localStream.value) {
-      localStream.value.getTracks().forEach(t => t.stop())
-      console.log(111);
-      localStream.value = null
-    }
-  }
 
   // --------------------------------------------------
   // initSocket, joinWebrtcRoom
@@ -605,6 +585,23 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
   });
 
+  onBeforeUnmount(() => {
+    rtcSocket.value?.disconnect()
+    rtcSocket.value = null
+
+    // 2) Закрыть все PeerConnections
+    for (const pcObj of Object.values(peerConnections.value)) {
+      pcObj.close()
+    }
+
+    // 3) Остановить локальные треки (камера/микрофон)
+    if (localStream.value) {
+      localStream.value.getTracks().forEach(t => t.stop())
+      console.log(111);
+      localStream.value = null
+    }
+  });
+
   return {
     rtcSocket,
     room,
@@ -614,7 +611,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     isCamOn,
     localVideo,
 
-    disconnect,
     initSocket,
     joinWebrtcRoom,
     toggleMic,
