@@ -58,7 +58,7 @@ function toggleCam() {
 </script>
 
 <template>
-  <div class="bg-surface-100 dark:bg-surface-800 overflow-auto">
+  <div class="bg-surface-100 dark:bg-surface-800 overflow-auto h-control">
     <div class="flex justify-center gap-2 py-2 px-4 w-fit mx-auto">
       <!-- Микрофон -->
       <div class="flex gap-1 p-1 bg-primary-600 rounded-full">

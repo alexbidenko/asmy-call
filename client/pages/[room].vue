@@ -17,7 +17,7 @@ definePageMeta({
   </div>
   <RoomWrapper v-else class="h-full flex flex-col">
     <Splitter
-      class="flex-1 !rounded-none overflow-hidden relative"
+      class="flex-1 !rounded-none !border-0 overflow-hidden relative"
       state-storage="local"
       state-key="video-chat-splitter"
       :pt="{ gutter: '!hidden md:!block' }"

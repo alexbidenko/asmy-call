@@ -154,11 +154,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="overflow-hidden relative"
+    class="overflow-hidden relative rounded-sm"
     :class="[{
-      'rounded-sm aspect-video': !opened,
-      'h-full w-full': opened,
-    }]"
+      'aspect-video': !opened,
+    }, $attrs.class]"
   >
     <video
       v-show="video"

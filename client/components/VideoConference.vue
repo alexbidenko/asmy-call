@@ -2,8 +2,6 @@
 import type { RemoteStreamObj } from '~/stores/webrtc'
 import type { MemberType } from '~/stores/member'
 
-const roomStore = useRoomStore();
-const devicesStore = useDeviceStore()
 const webrtcStore = useWebrtcStore()
 const memberStore = useMemberStore()
 const userStore = useUserStore()
@@ -78,45 +76,59 @@ watch(teleportedId, (v) => {
 </script>
 
 <template>
-  <div class="@container flex h-full">
-    <div id="large-video-slot" class="empty:hidden flex-1" />
+  <div
+    class="@container relative flex h-full overflow-y-auto overflow-x-hidden"
+    :style="`--stream-count: ${streams.length + 2 + +!!screenShareStore.stream}; --rows-style: repeat(${streams.length + +!!screenShareStore.stream}, auto) 1fr;`"
+  >
+    <AnimatePresence>
+      <Motion
+        v-show="interfaceStore.isMembersVisible"
+        as="div"
+        layout
+        class="grid grid-rows-(--rows-style) gap-2 p-area h-fit min-h-full w-full"
+        :class="{
+          'grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 @7xl:grid-cols-4 w-full': !teleportedId,
+          'grid-cols-[1fr_auto] !pb-0': teleportedId,
+        }"
+      >
+        <LayoutGroup>
+          <AnimatePresence>
+            <Motion
+              key="local-video"
+              layout
+              :initial="{ opacity: 0 }"
+              :animate="{ opacity: 1, transition: { delay: 0.5 } }"
+              :exit="{ opacity: 0 }"
+              :class="{
+                'col-1 row-start-1 row-end-(--stream-count)': teleportedId === 'local-video',
+                'w-64 col-2 row-auto': teleportedId && teleportedId !== 'local-video',
+              }"
+            >
+              <VideoItem
+                @click="toggleTeleportId('local-video')"
+                :video-ref="(el) => (webrtcStore.localVideo = el)"
+                :stream="webrtcStore.localStream"
+                :opened="teleportedId === 'local-video'"
+                :username="userStore.username"
+                :video="webrtcStore.isCamOn"
+                :audio="webrtcStore.isMicOn"
+                muted
+                :class="teleportedId === 'local-video' && 'full-area'"
+              />
+            </Motion>
 
-    <div
-      v-show="interfaceStore.isMembersVisible"
-      class="grid grid-cols-1 gap-2 p-2 h-fit"
-      :class="{
-        '@xl:grid-cols-2 @4xl:grid-cols-3 @7xl:grid-cols-4 w-full': !teleportedId,
-        'w-64': teleportedId,
-      }"
-    >
-      <LayoutGroup>
-        <Teleport
-          defer
-          to="#large-video-slot"
-          :disabled="teleportedId !== 'local-video'"
-        >
-          <VideoItem
-            @click="toggleTeleportId('local-video')"
-            :video-ref="(el) => (webrtcStore.localVideo = el)"
-            :stream="webrtcStore.localStream"
-            :opened="teleportedId === 'local-video'"
-            :username="userStore.username"
-            :video="webrtcStore.isCamOn"
-            :audio="webrtcStore.isMicOn"
-            muted
-          />
-        </Teleport>
-
-        <AnimatePresence>
-          <Motion
-            v-if="screenShareStore.stream"
-            key="local-screen"
-            layout
-            :initial="{ opacity: 0 }"
-            :animate="{ opacity: 1, transition: { delay: 0.5 } }"
-            :exit="{ opacity: 0 }"
-          >
-            <Teleport defer to="#large-video-slot" :disabled="teleportedId !== 'local-screen'">
+            <Motion
+              v-if="screenShareStore.stream"
+              key="local-screen"
+              layout
+              :initial="{ opacity: 0 }"
+              :animate="{ opacity: 1, transition: { delay: 0.5 } }"
+              :exit="{ opacity: 0 }"
+              :class="{
+                'col-1 row-start-1 row-end-(--stream-count)': teleportedId === 'local-screen',
+                'w-64 col-2 row-auto': teleportedId && teleportedId !== 'local-screen',
+              }"
+            >
               <VideoItem
                 @click="toggleTeleportId('local-screen')"
                 :video-ref="(el) => (screenShareStore.element = el)"
@@ -125,19 +137,22 @@ watch(teleportedId, (v) => {
                 :username="userStore.username"
                 muted
                 video
+                :class="teleportedId === 'local-screen' && 'full-area'"
               />
-            </Teleport>
-          </Motion>
+            </Motion>
 
-          <Motion
-            v-for="obj in streams"
-            :key="`stream-${obj.staticId}`"
-            layout
-            :initial="{ opacity: 0 }"
-            :animate="{ opacity: 1 }"
-            :exit="{ opacity: 0 }"
-          >
-            <Teleport defer to="#large-video-slot" :disabled="teleportedId !== `stream-${obj.id}`">
+            <Motion
+              v-for="obj in streams"
+              :key="`stream-${obj.staticId}`"
+              layout
+              :initial="{ opacity: 0 }"
+              :animate="{ opacity: 1 }"
+              :exit="{ opacity: 0 }"
+              :class="{
+                'col-1 row-start-1 row-end-(--stream-count)': teleportedId === `stream-${obj.id}`,
+                'w-64 col-2 row-auto': teleportedId && teleportedId !== `stream-${obj.id}`,
+              }"
+            >
               <VideoItem
                 @click="toggleTeleportId(`stream-${obj.id}`)"
                 :video-ref="(el) => setRemoteRef(el, obj.id)"
@@ -146,11 +161,12 @@ watch(teleportedId, (v) => {
                 :username="obj.username || 'TODO'"
                 :video="!!obj.video"
                 :audio="!!obj.audio"
+                :class="teleportedId === `stream-${obj.id}` && 'full-area'"
               />
-            </Teleport>
-          </Motion>
-        </AnimatePresence>
-      </LayoutGroup>
-    </div>
+            </Motion>
+          </AnimatePresence>
+        </LayoutGroup>
+      </Motion>
+    </AnimatePresence>
   </div>
 </template>

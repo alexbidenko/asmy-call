@@ -40,3 +40,19 @@
     }
   }
 }
+
+@layer utilities {
+  .h-control {
+    @apply h-16;
+  }
+
+  .p-area {
+    @apply p-2;
+  }
+
+  .full-area {
+    @apply top-2 bottom-2 sticky;
+
+    height: calc(100vh - var(--spacing) * 20);
+  }
+}
