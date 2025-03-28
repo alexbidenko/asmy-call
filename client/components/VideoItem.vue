@@ -1,17 +1,22 @@
 <script lang="ts" setup>
 const props = defineProps<{
-  stream?: MediaStream | null;
+  stream: MediaStream;
   videoRef: (el: HTMLVideoElement) => void;
   username: string;
   video?: boolean;
   audio?: boolean;
   opened?: boolean;
 }>();
+const emit = defineEmits<{
+  (event: 'teleport'): void;
+}>();
 defineOptions({ inheritAttrs: false });
 
-const { audio, stream } = toRefs(props);
+const { audio, video, stream } = toRefs(props);
 
 const audioOutputStore = useAudioOutputStore();
+
+const audioEnabled = ref(false);
 
 // Вычисляем буквы для заглушки (Avatar)
 const label = computed(() => {
@@ -103,33 +108,6 @@ function videoRefLocal(el: HTMLVideoElement) {
   localVideoEl.value = el
 }
 
-watch(stream, (v) => {
-  // TODO: при прекращении стрима есть лаг с растягиванием видео
-  //  Надо бы делать последний кадр в canvas и анимировать красиво
-  if (v && localVideoEl.value) props.videoRef(localVideoEl.value)
-});
-
-watch([audio, stream], ([v, s]) => {
-  if (v && s) {
-    if (s.getAudioTracks().length) setupAudioAnalyser(s);
-    else cleanupAudioAnalyser();
-
-    s.addEventListener('addtrack', () => {
-      if (s.getAudioTracks().length) setupAudioAnalyser(s);
-      else cleanupAudioAnalyser();
-    });
-
-    s.addEventListener('removetrack', () => {
-      if (s.getAudioTracks().length) setupAudioAnalyser(s);
-      else cleanupAudioAnalyser();
-    });
-  } else {
-    // audio=false или srcObject=null => глушим
-    cleanupAudioAnalyser()
-    amplitude.value = 0
-  }
-}, { immediate: true });
-
 // ----------------------------
 // Анимация / визуализация
 // ----------------------------
@@ -143,11 +121,46 @@ const visualizerStyle = computed(() => {
   }
 });
 
+const onCheckAudio = () => {
+  if (!audio.value) audioEnabled.value = false;
+
+  audioEnabled.value = stream.value.getAudioTracks().some((track) => track.enabled);
+
+  if (audioEnabled.value) setupAudioAnalyser(stream.value);
+  else cleanupAudioAnalyser();
+};
+
+watch(stream, (v) => {
+  // TODO: при прекращении стрима есть лаг с растягиванием видео
+  //  Надо бы делать последний кадр в canvas и анимировать красиво
+  if (v && localVideoEl.value) props.videoRef(localVideoEl.value)
+});
+
+watch([audioEnabled, video], (a, v) => {
+  if (!a && !v && props.opened) emit('teleport');
+});
+
 watch(localVideoEl, (el) => {
   if (el) audioOutputStore.register(el);
 });
 
+onMounted(() => {
+  onCheckAudio();
+
+  stream.value.addEventListener('addtrack', onCheckAudio);
+
+  stream.value.addEventListener('removetrack', onCheckAudio);
+
+  stream.value.addEventListener('change', onCheckAudio);
+});
+
 onBeforeUnmount(() => {
+  stream.value.removeEventListener('addtrack', onCheckAudio);
+
+  stream.value.removeEventListener('removetrack', onCheckAudio);
+
+  stream.value.removeEventListener('change', onCheckAudio);
+
   if (localVideoEl.value) audioOutputStore.dispose(localVideoEl.value);
 });
 </script>
@@ -181,7 +194,7 @@ onBeforeUnmount(() => {
 
     <!-- Небольшая "полоска" визуализации (пример). Появляется только если audio. -->
     <div
-      v-if="audio"
+      v-if="audioEnabled"
       class="absolute top-0 left-0 bottom-8 w-1 dark:bg-primary-500 bg-primary-600"
       :style="visualizerStyle"
     />
@@ -190,13 +203,13 @@ onBeforeUnmount(() => {
       class="absolute bottom-0 left-0 right-0 bg-surface-400/20 dark:bg-surface-600/20 text-center text-sm flex items-center h-8 gap-2 justify-center"
     >
       <div
-        v-if="audio"
+        v-if="audioEnabled"
         class="absolute top-0 left-0 h-full w-1 dark:bg-primary-500 bg-primary-600"
       />
 
       {{ username }}
       <span
-        v-if="!audio"
+        v-if="!audioEnabled"
         class="material-icons-outlined text-red-600 dark:text-red-400 !text-lg"
       >
         mic_off

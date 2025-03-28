@@ -16,7 +16,7 @@ const teleportedId = ref('');
  */
 const streams = computed(() => {
   // TODO: все еще не идеально с этими ключами
-  const map = new Map<string, Partial<RemoteStreamObj & MemberType> & { id: string; staticId: string }>();
+  const map = new Map<string, RemoteStreamObj & MemberType & { staticId: string }>();
 
   // TODO: а тут вообще иногда проблемы с обновлением, если так не считать явно
   const remoteStreams = webrtcStore.remoteStreams;
@@ -33,7 +33,7 @@ const streams = computed(() => {
       })
     })
 
-    map.set(el.id, { ...el, staticId: el.id });
+    // map.set(el.id, { ...el, staticId: el.id });
   });
 
   const unknownStreams = remoteStreams.filter((s) => !memberStore.list.some((m) => m.id === s.socketId));
@@ -85,10 +85,10 @@ watch(teleportedId, (v) => {
         v-show="interfaceStore.isMembersVisible"
         as="div"
         layout
-        class="grid grid-rows-(--rows-style) gap-2 p-area h-fit min-h-full w-full"
+        class="grid gap-2 p-area h-fit w-full"
         :class="{
           'grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 @7xl:grid-cols-4 w-full': !teleportedId,
-          'grid-cols-[1fr_auto] !pb-0': teleportedId,
+          'grid-cols-[1fr_auto] grid-rows-(--rows-style) !pb-0 min-h-full': teleportedId,
         }"
       >
         <LayoutGroup>
@@ -105,7 +105,7 @@ watch(teleportedId, (v) => {
               }"
             >
               <VideoItem
-                @click="toggleTeleportId('local-video')"
+                @teleport="toggleTeleportId('local-video')"
                 :video-ref="(el) => (webrtcStore.localVideo = el)"
                 :stream="webrtcStore.localStream"
                 :opened="teleportedId === 'local-video'"
@@ -130,7 +130,7 @@ watch(teleportedId, (v) => {
               }"
             >
               <VideoItem
-                @click="toggleTeleportId('local-screen')"
+                @teleport="toggleTeleportId('local-screen')"
                 :video-ref="(el) => (screenShareStore.element = el)"
                 :stream="screenShareStore.stream"
                 :opened="teleportedId === 'local-screen'"
@@ -154,7 +154,7 @@ watch(teleportedId, (v) => {
               }"
             >
               <VideoItem
-                @click="toggleTeleportId(`stream-${obj.id}`)"
+                @teleport="toggleTeleportId(`stream-${obj.id}`)"
                 :video-ref="(el) => setRemoteRef(el, obj.id)"
                 :stream="obj.stream"
                 :opened="teleportedId === `stream-${obj.id}`"
