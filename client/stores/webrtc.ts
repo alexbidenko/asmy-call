@@ -4,13 +4,12 @@ export interface RemoteStreamObj {
   id: string
   socketId: string
   stream: MediaStream
-  video: boolean
-  audio: boolean
 }
 
 export const useWebrtcStore = defineStore('webrtc', () => {
   const screenShareStore = useScreenShareStore();
   const deviceStore = useDeviceStore();
+  const localStreamStore = useLocalStreamStore();
 
   // -------------------
   // State (Composition API refs)
@@ -18,16 +17,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const rtcSocket = ref<Socket | null>(null)
   const mySocketId = ref('')
   const room = ref('')
-  const localStream = ref<MediaStream>(new MediaStream())
   const remoteStreams = ref<RemoteStreamObj[]>([])
   const peerConnections = ref<Record<string, RTCPeerConnection>>({})
-
-  // Контролы
-  const isMicOn = ref(false)
-  const isCamOn = ref(false)
-
-  const previousAudioConstraints = ref<any>(null)
-  const previousVideoConstraints = ref<any>(null)
 
   // У нас в UI <video ref="localVideo" />
   const localVideo = ref<HTMLVideoElement | null>(null)
@@ -105,6 +96,10 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       remoteStreams.value = remoteStreams.value.filter((r) => r.socketId !== socketId)
       memberStore.leave(socketId)
     })
+
+    // Запускаем локальный стрим (камера/микрофон) — если хотим "автоматически"
+    // (если user сам потом включает кнопкой, можно убрать эту строку)
+    updateRemoteTracks()
   }
 
   const joinWebrtcRoom = () => {
@@ -191,9 +186,9 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       }
     }
 
-    if (localStream.value) {
-      localStream.value.getTracks().forEach(track => {
-        pc.addTrack(track, localStream.value!)
+    if (localStreamStore.stream) {
+      localStreamStore.stream.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamStore.stream!)
       })
     }
     if (screenShareStore.stream) {
@@ -212,31 +207,19 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     const found = remoteStreams.value.find(
       (x) => x.socketId === socketId && x.stream.id === stream.id
     )
+
     if (!found) {
       remoteStreams.value.push({
         id: stream.id,
         stream,
         socketId,
-        audio: !!stream.getAudioTracks().length,
-        video: !!stream.getVideoTracks().length,
       })
-    } else {
-      found.audio = !!stream.getAudioTracks().length
-      found.video = !!stream.getVideoTracks().length
     }
   }
 
   const removeRemoteStream = (stream: MediaStream, socketId: string) => {
-    if (stream.getTracks().length) {
-      const found = remoteStreams.value.find(
-        (x) => x.socketId === socketId && x.stream.id === stream.id
-      )
-      if (found) {
-        found.audio = !!stream.getAudioTracks().length
-        found.video = !!stream.getVideoTracks().length
-      }
-      return
-    }
+    if (stream.getTracks().length) return
+
     remoteStreams.value = remoteStreams.value.filter(
       (x) => !(x.socketId === socketId && x.stream.id === stream.id)
     )
@@ -315,101 +298,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
   }
 
-  // --------------------------------------------------
-  // Локальный стрим: кам+мик
-  // --------------------------------------------------
-  const initLocalStream = async (audioDevId?: string, videoDevId?: string) => {
-    const audioConstraints = isMicOn.value
-      ? (audioDevId && audioDevId !== 'default')
-        ? { deviceId: { exact: audioDevId } }
-        : true
-      : false
-
-    const videoConstraints = isCamOn.value
-      ? (videoDevId && videoDevId !== 'default')
-        ? { deviceId: { exact: videoDevId } }
-        : true
-      : false
-
-    if (!localStream.value.getTracks().length) {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints || true,
-        video: videoConstraints
-      });
-      const newAudioTrack = stream.getAudioTracks()[0];
-      newAudioTrack.enabled = false;
-      localStream.value.addTrack(newAudioTrack);
-
-      updateRemoteTracks()
-      return
-    }
-
-    const getConstraintKey = (constraint: any) =>
-      typeof constraint === 'boolean' ? constraint : constraint.deviceId.exact
-
-    if (!!getConstraintKey(audioConstraints) !== !!previousAudioConstraints.value) {
-      const audioTracks = localStream.value.getAudioTracks()
-      audioTracks.forEach(track => {
-        track.enabled = !!audioConstraints;
-      });
-    } else {
-      // Если localStream уже есть, обновляем только необходимые треки
-      // Обновляем аудио-треки, только если состояние изменилось
-      if (getConstraintKey(audioConstraints) !== previousAudioConstraints.value) {
-        const audioTracks = localStream.value.getAudioTracks();
-
-        if (audioConstraints) {
-          // Если включаем микрофон
-          if (audioTracks.length === 0) {
-            // Если трек отсутствует, добавляем его заново
-            try {
-              const audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
-              const newAudioTrack = audioStream.getAudioTracks()[0];
-              localStream.value.addTrack(newAudioTrack);
-            } catch (error) {
-              console.error('Ошибка при обновлении аудио:', error);
-            }
-          } else {
-            // Если трек есть, просто включаем его
-            audioTracks.forEach(track => {
-              track.enabled = true;
-            });
-          }
-        } else {
-          // Если выключаем микрофон, не удаляем треки, а просто отключаем их
-          audioTracks.forEach(track => {
-            track.enabled = false;
-          });
-        }
-        previousAudioConstraints.value = getConstraintKey(audioConstraints);
-      }
-    }
-
-    if (getConstraintKey(videoConstraints) !== previousVideoConstraints.value) {
-      const videoTracks = localStream.value.getVideoTracks()
-      videoTracks.forEach(track => {
-        localStream.value?.removeTrack(track)
-        track.stop()
-      })
-
-      if (videoConstraints) {
-        try {
-          const videoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints })
-          const newVideoTrack = videoStream.getVideoTracks()[0]
-          localStream.value.addTrack(newVideoTrack)
-        } catch (error) {
-          console.error('Ошибка при обновлении видео:', error)
-        }
-      }
-
-      previousVideoConstraints.value = getConstraintKey(videoConstraints)
-    }
-
-    await updateRemoteTracks()
-  }
-
   const updateRemoteTracks = async () => {
-    if (!localStream.value) return
+    if (!localStreamStore.stream) return
 
     void deviceStore.enumerateDevices()
 
@@ -421,14 +311,23 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
       const senders = pc.getSenders()
 
-      for (const track of localStream.value.getTracks()) {
-        const existingSender = senders.find(s => s.track === track)
-
-        if (!existingSender) {
+      // TODO: вот тут что-то с удалением - не надо все senders перебирать, надо как-то умнее искать что удалить
+      for (const sender of senders) {
+        if (sender.track && !localStreamStore.stream.getTracks().includes(sender.track)) {
           try {
-            pc.addTrack(track, localStream.value!)
+            pc.removeTrack(sender)
           } catch (err) {
-            console.warn('[updateRemoteTracks] addTrack failed', err)
+            console.warn('[_updateRemoteTracks] addTrack failed', err)
+          }
+        }
+      }
+
+      for (const track of localStreamStore.stream.getTracks()) {
+        if (!senders.some(s => s.track === track)) {
+          try {
+            pc.addTrack(track, localStreamStore.stream!)
+          } catch (err) {
+            console.warn('[_updateRemoteTracks] addTrack failed', err)
           }
         }
       }
@@ -446,11 +345,11 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         // я MASTER => doOffer
         if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
           negotiationInProgress.value = true
-          console.log('[updateRemoteTracks] MASTER -> doOffer for', remoteId)
+          console.log('[_updateRemoteTracks] MASTER -> doOffer for', remoteId)
           try {
             await doOffer(pc, remoteId)
           } catch (err) {
-            console.warn('[updateRemoteTracks] doOffer failed', err)
+            console.warn('[_updateRemoteTracks] doOffer failed', err)
           } finally {
             negotiationInProgress.value = false
           }
@@ -465,52 +364,13 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
   }
 
-  const toggleMic = (state: boolean) => {
-    isMicOn.value = state
-    if (localStream.value) {
-      const track = localStream.value.getAudioTracks()[0]
-      if (track) {
-        track.enabled = state
-        if (!state) {
-          updateRemoteTracks()
-          startOrUpdateStream()
-        }
-      }
-    }
-    if (state) {
-      startOrUpdateStream()
-    }
-  }
+  watch(localVideo, (element) => {
+    if (element && localStreamStore.stream) element.srcObject = localStreamStore.stream;
+  });
 
-  const toggleCam = (state: boolean) => {
-    isCamOn.value = state
-    if (localStream.value) {
-      const track = localStream.value.getVideoTracks()[0]
-      if (track) {
-        track.enabled = state
-        if (!state) {
-          updateRemoteTracks()
-          startOrUpdateStream()
-        }
-      }
-    }
-    if (state) {
-      startOrUpdateStream()
-    }
-  }
-
-  const startOrUpdateStream = async () => {
-    await initLocalStream(
-      deviceStore.selectedAudioInput,
-      deviceStore.selectedVideoInput
-    )
-
-    nextTick(() => {
-      if (localVideo.value && localStream.value) {
-        localVideo.value.srcObject = localStream.value
-      }
-    })
-  };
+  watch(() => localStreamStore.constraints, () => {
+    updateRemoteTracks();
+  }, { deep: true });
 
   watch(() => screenShareStore.stream, async (screen, prev) => {
     let didOffer = false;
@@ -593,27 +453,15 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     for (const pcObj of Object.values(peerConnections.value)) {
       pcObj.close()
     }
-
-    // 3) Остановить локальные треки (камера/микрофон)
-    if (localStream.value) {
-      localStream.value.getTracks().forEach(t => t.stop())
-      localStream.value = new MediaStream();
-    }
   });
 
   return {
     rtcSocket,
     room,
-    localStream,
     remoteStreams,
-    isMicOn,
-    isCamOn,
     localVideo,
 
     initSocket,
     joinWebrtcRoom,
-    toggleMic,
-    toggleCam,
-    startOrUpdateStream,
   }
 });

@@ -3,20 +3,18 @@ const props = defineProps<{
   stream: MediaStream;
   videoRef: (el: HTMLVideoElement) => void;
   username: string;
-  video?: boolean;
-  audio?: boolean;
   opened?: boolean;
+  constraints?: unknown;
 }>();
 const emit = defineEmits<{
   (event: 'teleport'): void;
 }>();
 defineOptions({ inheritAttrs: false });
 
-const { audio, video, stream } = toRefs(props);
-
 const audioOutputStore = useAudioOutputStore();
 
 const audioEnabled = ref(false);
+const videoEnabled = ref(false);
 
 // Вычисляем буквы для заглушки (Avatar)
 const label = computed(() => {
@@ -121,22 +119,21 @@ const visualizerStyle = computed(() => {
   }
 });
 
-const onCheckAudio = () => {
-  if (!audio.value) audioEnabled.value = false;
+const onCheckStream = () => {
+  audioEnabled.value = props.stream.getAudioTracks().some((track) => track.enabled);
+  videoEnabled.value = props.stream.getVideoTracks().some((track) => track.enabled);
 
-  audioEnabled.value = stream.value.getAudioTracks().some((track) => track.enabled);
-
-  if (audioEnabled.value) setupAudioAnalyser(stream.value);
+  if (audioEnabled.value) setupAudioAnalyser(props.stream);
   else cleanupAudioAnalyser();
 };
 
-watch(stream, (v) => {
+watch(() => props.stream, (v) => {
   // TODO: при прекращении стрима есть лаг с растягиванием видео
   //  Надо бы делать последний кадр в canvas и анимировать красиво
   if (v && localVideoEl.value) props.videoRef(localVideoEl.value)
 });
 
-watch([audioEnabled, video], (a, v) => {
+watch([audioEnabled, videoEnabled], (a, v) => {
   if (!a && !v && props.opened) emit('teleport');
 });
 
@@ -144,22 +141,32 @@ watch(localVideoEl, (el) => {
   if (el) audioOutputStore.register(el);
 });
 
+watch(() => props.constraints, () => {
+  onCheckStream();
+}, { deep: true });
+
 onMounted(() => {
-  onCheckAudio();
+  onCheckStream();
 
-  stream.value.addEventListener('addtrack', onCheckAudio);
+  props.stream.addEventListener('addtrack', onCheckStream);
 
-  stream.value.addEventListener('removetrack', onCheckAudio);
+  props.stream.addEventListener('removetrack', onCheckStream);
 
-  stream.value.addEventListener('change', onCheckAudio);
+  props.stream.addEventListener('change', onCheckStream);
+
+  if (props.stream.getAudioTracks().length) {
+    props.stream.getAudioTracks()[0].addEventListener('mute', () => console.log('mute') || onCheckStream());
+    props.stream.getAudioTracks()[0].addEventListener('unmute', () => console.log('unmute') || onCheckStream());
+    props.stream.getAudioTracks()[0].addEventListener('ended', onCheckStream);
+  }
 });
 
 onBeforeUnmount(() => {
-  stream.value.removeEventListener('addtrack', onCheckAudio);
+  props.stream.removeEventListener('addtrack', onCheckStream);
 
-  stream.value.removeEventListener('removetrack', onCheckAudio);
+  props.stream.removeEventListener('removetrack', onCheckStream);
 
-  stream.value.removeEventListener('change', onCheckAudio);
+  props.stream.removeEventListener('change', onCheckStream);
 
   if (localVideoEl.value) audioOutputStore.dispose(localVideoEl.value);
 });
@@ -173,8 +180,9 @@ onBeforeUnmount(() => {
     }, $attrs.class]"
   >
     <video
-      v-show="video"
+      v-show="videoEnabled"
       :ref="(el) => videoRefLocal(el as HTMLVideoElement)"
+      @click="emit('teleport')"
       autoplay
       playsinline
       :muted="audioOutputStore.muted"
@@ -182,7 +190,7 @@ onBeforeUnmount(() => {
       v-bind="$attrs"
     />
     <div
-      v-if="!video"
+      v-if="!videoEnabled"
       class="bg-surface-300 dark:bg-surface-800 flex items-center justify-center h-full w-full"
     >
       <Avatar

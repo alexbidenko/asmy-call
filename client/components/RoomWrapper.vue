@@ -3,6 +3,7 @@ const deviceStore = useDeviceStore();
 const roomStore = useRoomStore();
 const chatStore = useChatStore();
 const webrtcStore = useWebrtcStore();
+const localStreamStore = useLocalStreamStore();
 
 const handleDeviceChange = async () => {
   await deviceStore.enumerateDevices();
@@ -19,11 +20,9 @@ onMounted(async () => {
     webrtcStore.initSocket(roomStore.room)
   }
 
-  webrtcStore.joinWebrtcRoom()
+  await localStreamStore.init();
 
-  // Запускаем локальный стрим (камера/микрофон) — если хотим "автоматически"
-  // (если user сам потом включает кнопкой, можно убрать эту строку)
-  webrtcStore.startOrUpdateStream()
+  webrtcStore.joinWebrtcRoom();
 
   if (!chatStore.socket || chatStore.room !== roomStore.room) {
     chatStore.initChat(roomStore.room)

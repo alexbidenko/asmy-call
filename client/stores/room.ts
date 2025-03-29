@@ -6,6 +6,7 @@ export const useRoomStore = defineStore('room', () => {
   const audioOutputStore = useAudioOutputStore();
   const screenShareStore = useScreenShareStore();
   const chatStore = useChatStore();
+  const localStreamStore = useLocalStreamStore();
 
   const room = computed(() => typeof route.params.room === 'string' ? route.params.room : '');
 
@@ -15,6 +16,7 @@ export const useRoomStore = defineStore('room', () => {
     audioOutputStore.$dispose();
     screenShareStore.$dispose();
     memberStore.$dispose();
+    localStreamStore.$dispose();
 
     router.push('/');
   };

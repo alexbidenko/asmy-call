@@ -2,11 +2,11 @@
 import type { MenuItem } from 'primevue/menuitem'
 
 const interfaceStore = useInterfaceStore()
-const webrtcStore = useWebrtcStore()
 const deviceStore = useDeviceStore()
 const audioOutputStore = useAudioOutputStore();
 const screenShareStore = useScreenShareStore();
 const roomStore = useRoomStore();
+const localStreamStore = useLocalStreamStore();
 
 const micMenu = ref()
 const audioMenu = ref()
@@ -18,8 +18,6 @@ const micItems = computed<MenuItem[]>(() =>
     label: dev.label,
     command: () => {
       deviceStore.selectedAudioInput = dev.deviceId
-      // После смены микрофона — пересоздаём стрим
-      webrtcStore.startOrUpdateStream()
     },
     class: deviceStore.selectedAudioInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
@@ -40,21 +38,10 @@ const videoItems = computed<MenuItem[]>(() =>
     label: dev.label,
     command: () => {
       deviceStore.selectedVideoInput = dev.deviceId
-      // После смены камеры — пересоздаём стрим
-      webrtcStore.startOrUpdateStream()
     },
     class: deviceStore.selectedVideoInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
 )
-
-// Тогглы микрофона/камеры – просто вызывают toggleMic / toggleCam
-function toggleMic() {
-  webrtcStore.toggleMic(!webrtcStore.isMicOn)
-}
-
-function toggleCam() {
-  webrtcStore.toggleCam(!webrtcStore.isCamOn)
-}
 </script>
 
 <template>
@@ -63,16 +50,16 @@ function toggleCam() {
       <!-- Микрофон -->
       <div class="flex gap-1 p-1 bg-primary-600 rounded-full">
         <Menu ref="micMenu" :model="micItems" :popup="true" class="max-w-80" />
-        <Button @click="micMenu?.show" :disabled="!micItems.length" rounded text>
+        <Button @click="micMenu?.toggle" :disabled="!micItems.length" rounded text>
           <template #icon>
             <span class="material-icons-outlined">keyboard_arrow_up</span>
           </template>
         </Button>
 
-        <Button @click="toggleMic" rounded>
+        <Button @click="localStreamStore.audio = !localStreamStore.audio" rounded>
           <template #icon>
             <span class="material-icons-outlined">
-              {{ webrtcStore.isMicOn ? 'mic' : 'mic_off' }}
+              {{ localStreamStore.audio ? 'mic' : 'mic_off' }}
             </span>
           </template>
         </Button>
@@ -81,7 +68,7 @@ function toggleCam() {
       <!-- Вывод звука -->
       <div class="flex gap-1 p-1 bg-primary-600 rounded-full">
         <Menu ref="audioMenu" :model="audioItems" :popup="true" class="max-w-80" />
-        <Button @click="audioMenu?.show" :disabled="!audioItems.length" rounded text>
+        <Button @click="audioMenu?.toggle" :disabled="!audioItems.length" rounded text>
           <template #icon>
             <span class="material-icons-outlined">keyboard_arrow_up</span>
           </template>
@@ -99,16 +86,16 @@ function toggleCam() {
       <!-- Камера -->
       <div class="flex gap-1 p-1 bg-primary-600 rounded-full">
         <Menu ref="videoMenu" :model="videoItems" :popup="true" class="max-w-80" />
-        <Button @click="videoMenu?.show" :disabled="!videoItems.length" rounded text>
+        <Button @click="videoMenu?.toggle" :disabled="!videoItems.length" rounded text>
           <template #icon>
             <span class="material-icons-outlined">keyboard_arrow_up</span>
           </template>
         </Button>
 
-        <Button @click="toggleCam" rounded>
+        <Button @click="localStreamStore.video = !localStreamStore.video" rounded>
           <template #icon>
             <span class="material-icons-outlined">
-              {{ webrtcStore.isCamOn ? 'videocam' : 'videocam_off' }}
+              {{ localStreamStore.video ? 'videocam' : 'videocam_off' }}
             </span>
           </template>
         </Button>

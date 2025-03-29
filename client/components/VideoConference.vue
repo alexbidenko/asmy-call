@@ -3,6 +3,7 @@ import type { RemoteStreamObj } from '~/stores/webrtc'
 import type { MemberType } from '~/stores/member'
 
 const webrtcStore = useWebrtcStore()
+const localStreamStore = useLocalStreamStore();
 const memberStore = useMemberStore()
 const userStore = useUserStore()
 const interfaceStore = useInterfaceStore()
@@ -32,8 +33,6 @@ const streams = computed(() => {
         staticId: s.id,
       })
     })
-
-    // map.set(el.id, { ...el, staticId: el.id });
   });
 
   const unknownStreams = remoteStreams.filter((s) => !memberStore.list.some((m) => m.id === s.socketId));
@@ -61,8 +60,8 @@ function setRemoteRef(el: HTMLVideoElement | null, streamId: string) {
   }
 }
 
-watch([() => webrtcStore.localStream, () => screenShareStore.stream, () => webrtcStore.remoteStreams], () => {
-  if (teleportedId.value === 'local-video' && !webrtcStore.localStream) teleportedId.value = '';
+watch([() => localStreamStore.stream, () => screenShareStore.stream, () => webrtcStore.remoteStreams], () => {
+  if (teleportedId.value === 'local-video' && !localStreamStore.stream) teleportedId.value = '';
   else if (teleportedId.value === 'local-screen' && !screenShareStore.stream) teleportedId.value = '';
   else if (
     teleportedId.value.startsWith('stream-') &&
@@ -94,6 +93,7 @@ watch(teleportedId, (v) => {
         <LayoutGroup>
           <AnimatePresence>
             <Motion
+              v-if="localStreamStore.stream"
               key="local-video"
               layout
               :initial="{ opacity: 0 }"
@@ -107,12 +107,11 @@ watch(teleportedId, (v) => {
               <VideoItem
                 @teleport="toggleTeleportId('local-video')"
                 :video-ref="(el) => (webrtcStore.localVideo = el)"
-                :stream="webrtcStore.localStream"
+                :stream="localStreamStore.stream"
                 :opened="teleportedId === 'local-video'"
                 :username="userStore.username"
-                :video="webrtcStore.isCamOn"
-                :audio="webrtcStore.isMicOn"
                 muted
+                :constraints="localStreamStore.constraints"
                 :class="teleportedId === 'local-video' && 'full-area'"
               />
             </Motion>
@@ -136,7 +135,6 @@ watch(teleportedId, (v) => {
                 :opened="teleportedId === 'local-screen'"
                 :username="userStore.username"
                 muted
-                video
                 :class="teleportedId === 'local-screen' && 'full-area'"
               />
             </Motion>
@@ -159,8 +157,6 @@ watch(teleportedId, (v) => {
                 :stream="obj.stream"
                 :opened="teleportedId === `stream-${obj.id}`"
                 :username="obj.username || 'TODO'"
-                :video="!!obj.video"
-                :audio="!!obj.audio"
                 :class="teleportedId === `stream-${obj.id}` && 'full-area'"
               />
             </Motion>

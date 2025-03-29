@@ -15,33 +15,25 @@ export const useDeviceStore = defineStore('device', () => {
 
   // Новая функция: проверяет, если выбранное устройство недоступно – переключает на "default"
   const checkSelectedDevices = () => {
-    let changed = false
-
     if (
       selectedAudioInput.value !== 'default' &&
       !audioInputs.value.some((d) => d.deviceId === selectedAudioInput.value)
     ) {
       selectedAudioInput.value = 'default'
-      changed = true
     }
+
     if (
       selectedAudioOutput.value !== 'default' &&
       !audioOutputs.value.some((d) => d.deviceId === selectedAudioOutput.value)
     ) {
       selectedAudioOutput.value = 'default'
-      changed = true
     }
+
     if (
       selectedVideoInput.value !== 'default' &&
       !videoInputs.value.some((d) => d.deviceId === selectedVideoInput.value)
     ) {
       selectedVideoInput.value = 'default'
-      changed = true
-    }
-
-    if (changed) {
-      // Обновляем локальный поток в WebRTC-сторе, чтобы новые устройства использовались
-      useWebrtcStore().startOrUpdateStream()
     }
   }
 
