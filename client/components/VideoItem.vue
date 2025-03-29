@@ -5,6 +5,7 @@ const props = defineProps<{
   username: string;
   opened?: boolean;
   constraints?: unknown;
+  mirrored?: boolean;
 }>();
 const emit = defineEmits<{
   (event: 'teleport'): void;
@@ -131,6 +132,11 @@ const onCheckStream = () => {
   audioEnabled.value = props.stream.getAudioTracks().some((track) => track.enabled);
   videoEnabled.value = props.stream.getVideoTracks().some((track) => track.enabled);
 
+  if (
+    props.stream.getAudioTracks().length > 1 ||
+    props.stream.getVideoTracks().length > 1
+  ) console.warn('[VideoItem] over count tracks:', props.stream.getTracks());
+
   props.stream.getAudioTracks().forEach((track) => {
     track.removeEventListener('mute', onCheckStream);
     track.removeEventListener('unmute', onCheckStream);
@@ -205,6 +211,7 @@ onBeforeUnmount(() => {
       playsinline
       :muted="audioOutputStore.muted"
       class="bg-black h-full w-full object-contain object-center"
+      :class="{ '-scale-x-100': mirrored }"
       v-bind="$attrs"
     />
     <div

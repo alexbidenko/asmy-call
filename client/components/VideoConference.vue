@@ -111,6 +111,7 @@ watch(teleportedId, (v) => {
                 :opened="teleportedId === 'local-video'"
                 :username="userStore.username"
                 muted
+                mirrored
                 :constraints="localStreamStore.constraints"
                 :class="teleportedId === 'local-video' && 'full-area'"
               />

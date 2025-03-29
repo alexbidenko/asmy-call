@@ -1,4 +1,5 @@
-import { io, Socket } from 'socket.io-client'
+import {io, Socket} from 'socket.io-client'
+import {SenderTypeEnum} from "~/stores/sender";
 
 export interface RemoteStreamObj {
   id: string
@@ -10,7 +11,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const screenShareStore = useScreenShareStore();
   const deviceStore = useDeviceStore();
   const localStreamStore = useLocalStreamStore();
-  const memberStore = useMemberStore()
+  const memberStore = useMemberStore();
+  const senderStore = useSenderStore();
 
   // -------------------
   // State (Composition API refs)
@@ -27,7 +29,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // На каждого удалённого: (mic / sysAudio / cam / screen)
   const transceivers = ref<Record<string, RTCPeerConnection>>({})
 
-  const senders = ref<Record<string, RTCRtpSender>>({})
   const remoteTracks = ref<string[]>([])
   const negotiationInProgress = reactive<Record<string, boolean>>({})
 
@@ -97,7 +98,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     // Запускаем локальный стрим (камера/микрофон) — если хотим "автоматически"
     // (если user сам потом включает кнопкой, можно убрать эту строку)
-    updateRemoteTracks()
+    updateLocalStreamForRemote()
   }
 
   const joinWebrtcRoom = () => {
@@ -140,15 +141,15 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       }
       remoteTracks.value.push(track.id)
 
-      if (evt?.streams[0]) {
-        evt.streams[0].onremovetrack = () => {
-          removeRemoteStream(evt.streams[0], remoteId)
+      evt.streams.forEach((stream) => {
+        stream.onremovetrack = () => {
+          removeRemoteStream(stream, remoteId)
         }
-        evt.streams[0].onaddtrack = () => {
-          pushRemoteStream(evt.streams[0], remoteId)
+        stream.onaddtrack = () => {
+          pushRemoteStream(stream, remoteId)
         }
-        pushRemoteStream(evt.streams[0], remoteId)
-      }
+        pushRemoteStream(stream, remoteId)
+      });
     }
 
     pc.onnegotiationneeded = async () => {
@@ -185,9 +186,10 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
 
     if (localStreamStore.stream) {
-      localStreamStore.stream.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamStore.stream!)
-      })
+      for (const track of localStreamStore.stream.getTracks()) {
+        const sender = pc.addTrack(track, localStreamStore.stream);
+        senderStore.save(SenderTypeEnum.default, remoteId, sender);
+      }
     }
     if (screenShareStore.stream) {
       screenShareStore.stream.getTracks().forEach(track => {
@@ -305,39 +307,53 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
   }
 
-  const updateRemoteTracks = async () => {
+  const updateLocalStreamForRemote = async () => {
     if (!localStreamStore.stream) return
 
     void deviceStore.enumerateDevices()
 
     // Обходим всех PC
-    for (const pc of Object.values(transceivers.value)) {
+    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (pc.signalingState === 'closed') {
         continue
       }
 
-      const senders = pc.getSenders()
-
       const nextAudio = localStreamStore.stream.getAudioTracks()[0];
       const nextVideo = localStreamStore.stream.getVideoTracks()[0];
-      const prevAudio = senders.find((s) => s.track?.kind === 'audio');
-      const prevVideo = senders.find((s) => s.track?.kind === 'video');
+      const {
+        audio: prevAudio,
+        video: prevVideo,
+      } = senderStore.find(SenderTypeEnum.default, remoteId);
+      console.log({ nextAudio, prevAudio });
 
-      if (nextAudio && !prevAudio) {
-        pc.addTrack(nextAudio, localStreamStore.stream)
-      } else if (!nextAudio && prevAudio) {
-        pc.removeTrack(prevAudio);
-      } else if (nextAudio && prevAudio) {
-        await prevAudio.replaceTrack(nextAudio);
-      }
+      await Promise.allSettled([
+        (async () => {
+          if (!localStreamStore.stream) return;
 
-      if (nextVideo && !prevVideo) {
-        pc.addTrack(nextVideo, localStreamStore.stream)
-      } else if (!nextVideo && prevVideo) {
-        pc.removeTrack(prevVideo);
-      } else if (nextVideo && prevVideo) {
-        await prevVideo.replaceTrack(nextVideo);
-      }
+          if (nextAudio && !prevAudio) {
+            const sender = pc.addTrack(nextAudio, localStreamStore.stream)
+            senderStore.save(SenderTypeEnum.default, remoteId, sender);
+          } else if (!nextAudio && prevAudio) {
+            senderStore.remove(SenderTypeEnum.screen, remoteId, prevAudio);
+            pc.removeTrack(prevAudio);
+          } else if (nextAudio && prevAudio) {
+            await prevAudio.replaceTrack(nextAudio);
+          }
+        })(),
+        (async () => {
+          if (!localStreamStore.stream) return;
+
+          if (nextVideo && !prevVideo) {
+            const sender = pc.addTrack(nextVideo, localStreamStore.stream)
+            senderStore.save(SenderTypeEnum.default, remoteId, sender);
+          } else if (!nextVideo && prevVideo) {
+            senderStore.remove(SenderTypeEnum.screen, remoteId, prevVideo);
+            pc.removeTrack(prevVideo);
+          } else if (nextVideo && prevVideo) {
+            await prevVideo.replaceTrack(nextVideo);
+          }
+        })(),
+      ]);
     }
 
     // 2) Обновляем SDP
@@ -364,22 +380,10 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       }
     }
 
-    // Если мы SLAVE
-    if (mySocketId.value &&
-      Object.keys(transceivers.value).some(id => id < mySocketId.value)) {
-      await slaveForceOffer()
-    }
+    await slaveForceOffer()
   }
 
-  watch(localVideo, (element) => {
-    if (element && localStreamStore.stream) element.srcObject = localStreamStore.stream;
-  });
-
-  watch(() => localStreamStore.constraints, () => {
-    updateRemoteTracks();
-  }, { deep: true });
-
-  watch(() => screenShareStore.stream, async (screen, prev) => {
+  const updateScreenShareForRemote = async (screen: MediaStream | null, prev: MediaStream | null) => {
     let didOffer = false;
 
     if (screen) {
@@ -392,7 +396,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         const sVid = screen.getVideoTracks()[0] || null
         if (sVid) {
           try {
-            senders.value.audioTx2 = pc.addTrack(sVid, screen)
+            const sender = pc.addTrack(sVid, screen);
+            senderStore.save(SenderTypeEnum.screen, remoteId, sender);
           } catch (err) {
             console.warn(`[startScreenShare] addTrack (video) failed:`, err)
           }
@@ -400,7 +405,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         const sAud = screen.getAudioTracks()[0] || null
         if (sAud) {
           try {
-            senders.value.videoTx2 = pc.addTrack(sAud, screen)
+            const sender = pc.addTrack(sAud, screen);
+            senderStore.save(SenderTypeEnum.screen, remoteId, sender);
           } catch (err) {
             console.warn(`[startScreenShare] addTrack (audio) failed:`, err)
           }
@@ -415,9 +421,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
             console.log('[stopScreenShare] skip closed PC remoteId=', remoteId)
             continue
           }
-          const sendersList = pc.getSenders()
           prev.getTracks().forEach((track) => {
-            const sender = sendersList.find(s => s.track === track)
+            const sender = senderStore.remove(SenderTypeEnum.screen, remoteId, track);
             if (sender) {
               try {
                 pc.removeTrack(sender)
@@ -450,6 +455,18 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       console.log('[updateScreenShare] => slaveForceOffer()')
       await slaveForceOffer()
     }
+  };
+
+  watch(localVideo, (element) => {
+    if (element && localStreamStore.stream) element.srcObject = localStreamStore.stream;
+  });
+
+  watch(() => localStreamStore.constraints, () => {
+    updateLocalStreamForRemote();
+  }, { deep: true });
+
+  watch(() => screenShareStore.stream, async (screen, prev) => {
+    updateScreenShareForRemote(screen, prev);
   });
 
   onBeforeUnmount(() => {
