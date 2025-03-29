@@ -1,5 +1,4 @@
 import {io, Socket} from 'socket.io-client'
-import {SenderTypeEnum} from "~/stores/sender";
 
 export interface RemoteStreamObj {
   id: string
@@ -116,7 +115,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     })
 
-    transceivers.value[remoteId] = pc
+    transceivers.value[remoteId] = pc;
 
     pc.onicecandidate = (evt) => {
       if (evt.candidate) {
@@ -157,10 +156,12 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         console.log('[onnegotiationneeded] skip => I am slave for', remoteId)
         return
       }
+
       if (negotiationInProgress[remoteId]) {
         console.log('[onnegotiationneeded] skip => negotiationInProgress=true')
         return
       }
+
       if (pc.signalingState !== 'stable') {
         console.log('[onnegotiationneeded] skip => state=', pc.signalingState)
         return
@@ -199,14 +200,14 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       })
     }
 
-    peerConnections.value[remoteId] = pc
+    peerConnections.value[remoteId] = pc;
     return pc
   }
 
   const pushRemoteStream = (stream: MediaStream, socketId: string) => {
-    const found = remoteStreams.value.find(
+    const found = remoteStreams.value.some(
       (x) => x.socketId === socketId && x.stream.id === stream.id
-    )
+    );
 
     if (!found) {
       remoteStreams.value.push({
@@ -278,7 +279,18 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     if (signalData.sdp) {
       console.log('[handleSignal] sdp from=', from, 'type=', signalData.sdp.type)
-      await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp))
+      // Если это answer, но состояние уже stable, игнорируем его,
+      // т.к. мы не ожидаем ответа.
+      if (signalData.sdp.type === 'answer' && pc.signalingState === 'stable') {
+        console.warn('[handleSignal] Received remote answer but signalingState is stable. Ignoring answer.')
+        return
+      }
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp))
+      } catch (err) {
+        console.error('[handleSignal] setRemoteDescription error:', err)
+        return
+      }
       console.log('[handleSignal] after setRemoteDescription => state=', pc.signalingState)
       if (signalData.sdp.type === 'offer') {
         await doAnswer(pc, from)
@@ -301,7 +313,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
           await doOffer(pc, remoteId)
           delete negotiationInProgress[remoteId]
         } else {
-          console.log('[slaveForceOffer] skip => state=', pc.signalingState)
+          console.warn('[slaveForceOffer] skip => state=', pc.signalingState)
         }
       }
     }
@@ -324,7 +336,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         audio: prevAudio,
         video: prevVideo,
       } = senderStore.find(SenderTypeEnum.default, remoteId);
-      console.log({ nextAudio, prevAudio });
+      console.log({ nextAudio, prevAudio, nextVideo, prevVideo });
 
       await Promise.allSettled([
         (async () => {
@@ -334,7 +346,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
             const sender = pc.addTrack(nextAudio, localStreamStore.stream)
             senderStore.save(SenderTypeEnum.default, remoteId, sender);
           } else if (!nextAudio && prevAudio) {
-            senderStore.remove(SenderTypeEnum.screen, remoteId, prevAudio);
+            senderStore.remove(SenderTypeEnum.default, remoteId, prevAudio);
             pc.removeTrack(prevAudio);
           } else if (nextAudio && prevAudio) {
             await prevAudio.replaceTrack(nextAudio);
@@ -347,7 +359,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
             const sender = pc.addTrack(nextVideo, localStreamStore.stream)
             senderStore.save(SenderTypeEnum.default, remoteId, sender);
           } else if (!nextVideo && prevVideo) {
-            senderStore.remove(SenderTypeEnum.screen, remoteId, prevVideo);
+            senderStore.remove(SenderTypeEnum.default, remoteId, prevVideo);
             pc.removeTrack(prevVideo);
           } else if (nextVideo && prevVideo) {
             await prevVideo.replaceTrack(nextVideo);
@@ -376,6 +388,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
           } finally {
             delete negotiationInProgress[remoteId]
           }
+        } else {
+          console.warn('[masterForceOffer] skip => state=', pc.signalingState)
         }
       }
     }
