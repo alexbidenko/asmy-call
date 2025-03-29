@@ -155,8 +155,8 @@ onMounted(() => {
   props.stream.addEventListener('change', onCheckStream);
 
   if (props.stream.getAudioTracks().length) {
-    props.stream.getAudioTracks()[0].addEventListener('mute', () => console.log('mute') || onCheckStream());
-    props.stream.getAudioTracks()[0].addEventListener('unmute', () => console.log('unmute') || onCheckStream());
+    props.stream.getAudioTracks()[0].addEventListener('mute', onCheckStream);
+    props.stream.getAudioTracks()[0].addEventListener('unmute', onCheckStream);
     props.stream.getAudioTracks()[0].addEventListener('ended', onCheckStream);
   }
 });

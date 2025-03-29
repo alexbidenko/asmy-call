@@ -311,25 +311,25 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
       const senders = pc.getSenders()
 
-      // TODO: вот тут что-то с удалением - не надо все senders перебирать, надо как-то умнее искать что удалить
-      for (const sender of senders) {
-        if (sender.track && !localStreamStore.stream.getTracks().includes(sender.track)) {
-          try {
-            pc.removeTrack(sender)
-          } catch (err) {
-            console.warn('[_updateRemoteTracks] addTrack failed', err)
-          }
-        }
+      const nextAudio = localStreamStore.stream.getAudioTracks()[0];
+      const nextVideo = localStreamStore.stream.getVideoTracks()[0];
+      const prevAudio = senders.find((s) => s.track?.kind === 'audio');
+      const prevVideo = senders.find((s) => s.track?.kind === 'video');
+
+      if (nextAudio && !prevAudio) {
+        pc.addTrack(nextAudio, localStreamStore.stream)
+      } else if (!nextAudio && prevAudio) {
+        pc.removeTrack(prevAudio);
+      } else if (nextAudio && prevAudio) {
+        await prevAudio.replaceTrack(nextAudio);
       }
 
-      for (const track of localStreamStore.stream.getTracks()) {
-        if (!senders.some(s => s.track === track)) {
-          try {
-            pc.addTrack(track, localStreamStore.stream!)
-          } catch (err) {
-            console.warn('[_updateRemoteTracks] addTrack failed', err)
-          }
-        }
+      if (nextVideo && !prevVideo) {
+        pc.addTrack(nextVideo, localStreamStore.stream)
+      } else if (!nextVideo && prevVideo) {
+        pc.removeTrack(prevVideo);
+      } else if (nextVideo && prevVideo) {
+        await prevVideo.replaceTrack(nextVideo);
       }
     }
 

@@ -53,7 +53,7 @@ export const useLocalStreamStore = defineStore('local_stream', () => {
     }
 
     if (!enabled) {
-      constraints.audio = 'none';
+      constraints.video = 'none';
       return;
     }
 
@@ -62,7 +62,7 @@ export const useLocalStreamStore = defineStore('local_stream', () => {
     });
     stream.value.addTrack(mediaStream.getVideoTracks()[0]);
 
-    constraints.audio = device;
+    constraints.video = device;
   });
 
   onBeforeUnmount(() => {
