@@ -16,6 +16,9 @@ const audioOutputStore = useAudioOutputStore();
 const audioEnabled = ref(false);
 const videoEnabled = ref(false);
 
+// TODO: фиерический костыль ибо не знаю пока как лучше
+const amplitudeHistory = ref(Array.from({ length: 20 }, () => 0));
+
 // Вычисляем буквы для заглушки (Avatar)
 const label = computed(() => {
   const parts = props.username.split(' ')
@@ -66,6 +69,11 @@ function animate() {
   }
   const avg = sum / dataArray.length  // ~0..128
   amplitude.value = Math.min(avg / 128, 1)  // нормируем до ~0..1
+
+  amplitudeHistory.value.shift();
+  amplitudeHistory.value.push(amplitude.value);
+
+  audioEnabled.value = !amplitudeHistory.value.some((v) => !v);
 }
 
 function cleanupAudioAnalyser() {
@@ -123,6 +131,16 @@ const onCheckStream = () => {
   audioEnabled.value = props.stream.getAudioTracks().some((track) => track.enabled);
   videoEnabled.value = props.stream.getVideoTracks().some((track) => track.enabled);
 
+  props.stream.getAudioTracks().forEach((track) => {
+    track.removeEventListener('mute', onCheckStream);
+    track.removeEventListener('unmute', onCheckStream);
+    track.removeEventListener('ended', onCheckStream);
+
+    track.addEventListener('mute', onCheckStream);
+    track.addEventListener('unmute', onCheckStream);
+    track.addEventListener('ended', onCheckStream);
+  });
+
   if (audioEnabled.value) setupAudioAnalyser(props.stream);
   else cleanupAudioAnalyser();
 };
@@ -153,15 +171,15 @@ onMounted(() => {
   props.stream.addEventListener('removetrack', onCheckStream);
 
   props.stream.addEventListener('change', onCheckStream);
-
-  if (props.stream.getAudioTracks().length) {
-    props.stream.getAudioTracks()[0].addEventListener('mute', onCheckStream);
-    props.stream.getAudioTracks()[0].addEventListener('unmute', onCheckStream);
-    props.stream.getAudioTracks()[0].addEventListener('ended', onCheckStream);
-  }
 });
 
 onBeforeUnmount(() => {
+  props.stream.getAudioTracks().forEach((track) => {
+    track.removeEventListener('mute', onCheckStream);
+    track.removeEventListener('unmute', onCheckStream);
+    track.removeEventListener('ended', onCheckStream);
+  });
+
   props.stream.removeEventListener('addtrack', onCheckStream);
 
   props.stream.removeEventListener('removetrack', onCheckStream);

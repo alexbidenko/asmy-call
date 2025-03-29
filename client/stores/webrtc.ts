@@ -10,6 +10,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const screenShareStore = useScreenShareStore();
   const deviceStore = useDeviceStore();
   const localStreamStore = useLocalStreamStore();
+  const memberStore = useMemberStore()
 
   // -------------------
   // State (Composition API refs)
@@ -28,7 +29,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
   const senders = ref<Record<string, RTCRtpSender>>({})
   const remoteTracks = ref<string[]>([])
-  const negotiationInProgress = ref(false)
+  const negotiationInProgress = reactive<Record<string, boolean>>({})
 
 
   // --------------------------------------------------
@@ -56,7 +57,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     })
 
     rtcSocket.value.on('existingUsers', (users: { socketId: string; username: string }[]) => {
-      const memberStore = useMemberStore()
       users.forEach((u) => {
         createPeerConnection(u.socketId)
         memberStore.join({ id: u.socketId, username: u.username })
@@ -64,16 +64,15 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     })
 
     rtcSocket.value.on('user-joined', (data) => {
-      const memberStore = useMemberStore()
       const pc = createPeerConnection(data.socketId)
       memberStore.join({ id: data.socketId, username: data.username })
 
       if (mySocketId.value < data.socketId) {
-        if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
-          negotiationInProgress.value = true
+        if (pc.signalingState === 'stable' && !negotiationInProgress[data.socketId]) {
+          negotiationInProgress[data.socketId] = true
           console.log('[user-joined] => doOffer to new user', data.socketId)
           doOffer(pc, data.socketId).finally(() => {
-            negotiationInProgress.value = false
+            delete negotiationInProgress[data.socketId]
           })
         }
       } else {
@@ -87,7 +86,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     })
 
     rtcSocket.value.on('user-left', (data) => {
-      const memberStore = useMemberStore()
       const socketId = data.socketId
       if (peerConnections.value[socketId]) {
         peerConnections.value[socketId].close()
@@ -158,7 +156,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         console.log('[onnegotiationneeded] skip => I am slave for', remoteId)
         return
       }
-      if (negotiationInProgress.value) {
+      if (negotiationInProgress[remoteId]) {
         console.log('[onnegotiationneeded] skip => negotiationInProgress=true')
         return
       }
@@ -167,12 +165,12 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         return
       }
 
-      negotiationInProgress.value = true
+      negotiationInProgress[remoteId] = true
       try {
         console.log('[onnegotiationneeded => doOffer]', mySocketId.value, '->', remoteId)
         await doOffer(pc, remoteId)
       } finally {
-        negotiationInProgress.value = false
+        delete negotiationInProgress[remoteId]
       }
     }
 
@@ -233,8 +231,17 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       console.warn('[doOffer] skip => state=', pc.signalingState)
       return
     }
+
     console.log('[doOffer] =>', remoteId)
     const offer = await pc.createOffer()
+
+    if (pc.signalingState !== 'stable') {
+      console.warn(`[doOffer] ABORTING => state changed to ${pc.signalingState} after createOffer, likely glare. Aborting our offer for ${remoteId}.`);
+      // Просто выходим. Входящий offer будет обработан в handleSignal -> doAnswer.
+      // Можно также установить флаг, что нужно пересогласование позже, если требуется.
+      return;
+    }
+
     await pc.setLocalDescription(offer)
     rtcSocket.value?.emit('webrtcSignal', {
       room: room.value,
@@ -250,7 +257,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       return
     }
     console.log('[doAnswer] =>', remoteId)
-    const answer = await pc.createAnswer()
+    const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer)
     rtcSocket.value?.emit('webrtcSignal', {
       room: room.value,
@@ -286,11 +293,11 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const slaveForceOffer = async () => {
     for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (mySocketId.value > remoteId) {
-        if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
-          negotiationInProgress.value = true
+        if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
+          negotiationInProgress[remoteId] = true
           console.log('[slaveForceOffer] => doOffer, me=', mySocketId.value, '->', remoteId)
           await doOffer(pc, remoteId)
-          negotiationInProgress.value = false
+          delete negotiationInProgress[remoteId]
         } else {
           console.log('[slaveForceOffer] skip => state=', pc.signalingState)
         }
@@ -343,15 +350,15 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         // я SLAVE, пропускаем
       } else {
         // я MASTER => doOffer
-        if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
-          negotiationInProgress.value = true
+        if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
+          negotiationInProgress[remoteId] = true
           console.log('[_updateRemoteTracks] MASTER -> doOffer for', remoteId)
           try {
             await doOffer(pc, remoteId)
           } catch (err) {
             console.warn('[_updateRemoteTracks] doOffer failed', err)
           } finally {
-            negotiationInProgress.value = false
+            delete negotiationInProgress[remoteId]
           }
         }
       }
@@ -425,13 +432,13 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       for (const [remoteId, pc] of Object.entries(transceivers.value)) {
         if (pc.signalingState === 'closed') continue
         if (mySocketId.value < remoteId) {
-          if (pc.signalingState === 'stable' && !negotiationInProgress.value) {
-            negotiationInProgress.value = true
+          if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
+            negotiationInProgress[remoteId] = true
             console.log('[stopScreenShare] master => doOffer to', remoteId)
             try {
               await doOffer(pc, remoteId)
             } finally {
-              negotiationInProgress.value = false
+              delete negotiationInProgress[remoteId]
             }
           }
           didOffer = true
