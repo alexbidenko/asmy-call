@@ -30,7 +30,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
   const remoteTracks = ref<string[]>([])
   const negotiationInProgress = reactive<Record<string, boolean>>({})
-
+  const pendingCandidate = ref<RTCIceCandidate[]>([]);
 
   // --------------------------------------------------
   // initSocket, joinWebrtcRoom
@@ -152,27 +152,25 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
 
     pc.onnegotiationneeded = async () => {
-      if (mySocketId.value >= remoteId) {
-        console.log('[onnegotiationneeded] skip => I am slave for', remoteId)
-        return
-      }
-
-      if (negotiationInProgress[remoteId]) {
-        console.log('[onnegotiationneeded] skip => negotiationInProgress=true')
-        return
-      }
-
-      if (pc.signalingState !== 'stable') {
-        console.log('[onnegotiationneeded] skip => state=', pc.signalingState)
-        return
-      }
-
-      negotiationInProgress[remoteId] = true
       try {
-        console.log('[onnegotiationneeded => doOffer]', mySocketId.value, '->', remoteId)
-        await doOffer(pc, remoteId)
+        negotiationInProgress[remoteId] = true;
+
+        const offer = await pc.createOffer()
+
+        await pc.setLocalDescription(offer);
+
+        if (pc.localDescription) {
+          rtcSocket.value?.emit('webrtcSignal', {
+            room: room.value,
+            from: mySocketId.value,
+            to: remoteId,
+            signalData: { sdp: pc.localDescription }
+          })
+        }
+      } catch (error) {
+        console.error('[onnegotiationneeded] process failed:', error);
       } finally {
-        delete negotiationInProgress[remoteId]
+        delete negotiationInProgress[remoteId];
       }
     }
 
@@ -245,13 +243,15 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       return;
     }
 
-    await pc.setLocalDescription(offer)
-    rtcSocket.value?.emit('webrtcSignal', {
-      room: room.value,
-      from: mySocketId.value,
-      to: remoteId,
-      signalData: { sdp: pc.localDescription }
-    })
+    await pc.setLocalDescription(offer);
+    if (pc.localDescription) {
+      rtcSocket.value?.emit('webrtcSignal', {
+        room: room.value,
+        from: mySocketId.value,
+        to: remoteId,
+        signalData: { sdp: pc.localDescription }
+      })
+    }
   }
 
   const doAnswer = async (pc: RTCPeerConnection, remoteId: string) => {
@@ -259,45 +259,82 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       console.warn('[doAnswer] skip => state=', pc.signalingState)
       return
     }
+
     console.log('[doAnswer] =>', remoteId)
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer)
-    rtcSocket.value?.emit('webrtcSignal', {
-      room: room.value,
-      from: mySocketId.value,
-      to: remoteId,
-      signalData: { sdp: pc.localDescription }
-    })
+
+    if (pc.localDescription) {
+      rtcSocket.value?.emit('webrtcSignal', {
+        room: room.value,
+        from: mySocketId.value,
+        to: remoteId,
+        signalData: { sdp: pc.localDescription }
+      })
+    }
   }
 
+  const handleCandidateSignal = async (pc: RTCPeerConnection, payload: any) => {
+    const { from, signalData } = payload;
+
+    try {
+      const candidate = new RTCIceCandidate(signalData.candidate);
+
+      console.log('[handleSignal] candidate from=', from)
+      if (!pc.localDescription) pendingCandidate.value.push(candidate)
+      else await pc.addIceCandidate(candidate)
+    } catch (error) {
+      console.error('[handleCandidateSignal] add ice candidate failed from=', from, 'remoteDescription=', pc.localDescription, error);
+    }
+  };
+
+  const handleDescriptionSignal = async (pc: RTCPeerConnection, payload: any) => {
+    const { from, signalData } = payload;
+
+    const sdp = new RTCSessionDescription(signalData.sdp);
+
+    if (
+      sdp.type === 'offer' &&
+      (negotiationInProgress[from] || pc.signalingState !== 'stable') &&
+      mySocketId.value < from
+    ) {
+      console.log('[handleSignal] remote offer skipped from=', from);
+      return;
+    }
+
+    console.log('[handleSignal] sdp from=', from, 'type=', sdp.type)
+
+    try {
+      await pc.setRemoteDescription(sdp);
+    } catch (err) {
+      console.error('[handleSignal] setRemoteDescription error:', err)
+      return
+    }
+
+    if (sdp.type === 'offer') {
+      console.log('[handleSignal] after setRemoteDescription => state=', pc.signalingState)
+      await doAnswer(pc, from);
+    }
+
+    try {
+      pendingCandidate.value.forEach(pc.addIceCandidate);
+      pendingCandidate.value = [];
+    } catch (error) {
+      console.error('[handleDescriptionSignal] add ice candidate failed from=', from, 'remoteDescription=', pc.localDescription, error);
+    }
+  };
+
   const handleSignal = async (payload: any) => {
-    const { from, signalData } = payload
+    const { from, signalData } = payload;
     if (!peerConnections.value[from]) {
       createPeerConnection(from)
     }
     const pc = peerConnections.value[from]
 
     if (signalData.sdp) {
-      console.log('[handleSignal] sdp from=', from, 'type=', signalData.sdp.type)
-      // Если это answer, но состояние уже stable, игнорируем его,
-      // т.к. мы не ожидаем ответа.
-      if (signalData.sdp.type === 'answer' && pc.signalingState === 'stable') {
-        console.warn('[handleSignal] Received remote answer but signalingState is stable. Ignoring answer.')
-        return
-      }
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp))
-      } catch (err) {
-        console.error('[handleSignal] setRemoteDescription error:', err)
-        return
-      }
-      console.log('[handleSignal] after setRemoteDescription => state=', pc.signalingState)
-      if (signalData.sdp.type === 'offer') {
-        await doAnswer(pc, from)
-      }
+      await handleDescriptionSignal(pc, payload);
     } else if (signalData.candidate) {
-      console.log('[handleSignal] candidate from=', from)
-      await pc.addIceCandidate(new RTCIceCandidate(signalData.candidate))
+      await handleCandidateSignal(pc, payload);
     }
   }
 
@@ -336,7 +373,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         audio: prevAudio,
         video: prevVideo,
       } = senderStore.find(SenderTypeEnum.default, remoteId);
-      console.log({ nextAudio, prevAudio, nextVideo, prevVideo });
 
       await Promise.allSettled([
         (async () => {
