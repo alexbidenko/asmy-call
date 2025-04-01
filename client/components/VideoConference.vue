@@ -38,6 +38,8 @@ const streams = computed(() => {
       username: userStore.username,
       stream: localStreamStore.stream,
       staticId: 'local-video',
+      muted: true,
+      mirrored: true,
       constraints: localStreamStore.constraints,
       setRef: (el) => (webrtcStore.localVideo = el),
     });
@@ -49,6 +51,7 @@ const streams = computed(() => {
       username: userStore.username,
       stream: screenShareStore.stream,
       staticId: 'local-screen',
+      muted: true,
       setRef: (el) => (screenShareStore.element = el),
     });
   }
