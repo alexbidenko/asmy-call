@@ -197,56 +197,66 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    class="overflow-hidden relative rounded-sm"
-    :class="[{
-      'aspect-video': !opened,
-    }, $attrs.class]"
+  <Motion
+    as="div"
+    layout
+    :initial="{ opacity: 0 }"
+    :animate="{ opacity: 1, transition: { delay: 0.5 } }"
+    :exit="{ opacity: 0 }"
+    :class="$attrs.class"
   >
-    <video
-      v-show="videoEnabled"
-      :ref="(el) => videoRefLocal(el as HTMLVideoElement)"
-      @click="emit('teleport')"
-      autoplay
-      playsinline
-      :muted="audioOutputStore.muted"
-      class="bg-black h-full w-full object-contain object-center"
-      :class="{ '-scale-x-100': mirrored }"
-      v-bind="$attrs"
-    />
     <div
-      v-if="!videoEnabled"
-      class="bg-surface-300 dark:bg-surface-800 flex items-center justify-center h-full w-full"
+      class="overflow-hidden relative rounded-sm"
+      :class="{
+        'aspect-video': !opened,
+        'full-area': opened,
+      }"
     >
-      <Avatar
-        :label="label"
-        size="large"
-        shape="circle"
+      <video
+        v-show="videoEnabled"
+        :ref="(el) => videoRefLocal(el as HTMLVideoElement)"
+        @click="emit('teleport')"
+        autoplay
+        playsinline
+        :muted="audioOutputStore.muted"
+        class="bg-black h-full w-full object-contain object-center"
+        :class="{ '-scale-x-100': mirrored }"
+        v-bind="$attrs"
       />
-    </div>
+      <div
+        v-if="!videoEnabled"
+        class="bg-surface-300 dark:bg-surface-800 flex items-center justify-center h-full w-full"
+      >
+        <Avatar
+          :label="label"
+          size="large"
+          shape="circle"
+        />
+      </div>
 
-    <!-- Небольшая "полоска" визуализации (пример). Появляется только если audio. -->
-    <div
-      v-if="audioEnabled"
-      class="absolute top-0 left-0 bottom-8 w-1 dark:bg-primary-500 bg-primary-600"
-      :style="visualizerStyle"
-    />
-
-    <div
-      class="absolute bottom-0 left-0 right-0 bg-surface-400/20 dark:bg-surface-600/20 text-center text-sm flex items-center h-8 gap-2 justify-center"
-    >
+      <!-- Небольшая "полоска" визуализации (пример). Появляется только если audio. -->
       <div
         v-if="audioEnabled"
-        class="absolute top-0 left-0 h-full w-1 dark:bg-primary-500 bg-primary-600"
+        class="absolute top-0 left-0 bottom-8 w-1 dark:bg-primary-500 bg-primary-600"
+        :style="visualizerStyle"
       />
 
-      {{ username }}
-      <span
-        v-if="!audioEnabled"
-        class="material-icons-outlined text-red-600 dark:text-red-400 !text-lg"
+      <div
+        class="absolute bottom-0 left-0 right-0 bg-surface-400/20 dark:bg-surface-600/20 text-center text-sm flex items-center h-8 gap-2 justify-center"
       >
-        mic_off
-      </span>
+        <div
+          v-if="audioEnabled"
+          class="absolute top-0 left-0 h-full w-1 dark:bg-primary-500 bg-primary-600"
+        />
+
+        {{ username }}
+        <span
+          v-if="!audioEnabled"
+          class="material-icons-outlined text-red-600 dark:text-red-400 !text-lg"
+        >
+          mic_off
+        </span>
+      </div>
     </div>
-  </div>
+  </Motion>
 </template>

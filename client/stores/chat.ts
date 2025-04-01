@@ -8,25 +8,24 @@ export interface ChatMessage {
 
 export const useChatStore = defineStore('chat', () => {
   const interfaceStore = useInterfaceStore();
+  const roomStore = useRoomStore();
   const toast = useToast();
 
   // state
   const socket = ref<Socket | null>(null)
   const messages = ref<ChatMessage[]>([])
-  const room = ref('')
 
   // actions
-  const initChat = (newRoom: string) => {
+  const initChat = () => {
     const config = useRuntimeConfig()
 
     socket.value?.disconnect();
 
-    room.value = newRoom
     messages.value = []
     socket.value = io(config.public.apiHost || '', { forceNew: true })
 
     socket.value.on('connect', () => {
-      socket.value?.emit('joinRoom', { room: newRoom })
+      socket.value?.emit('joinRoom', { room: roomStore.room })
     })
     socket.value.on('roomHistory', (history: ChatMessage[]) => {
       messages.value = history
@@ -51,7 +50,7 @@ export const useChatStore = defineStore('chat', () => {
 
     if (!text.trim()) return
     socket.value?.emit('sendMessage', {
-      room: room.value,
+      room: roomStore.room,
       name: userStore.username,
       text
     })
@@ -65,7 +64,6 @@ export const useChatStore = defineStore('chat', () => {
   return {
     socket,
     messages,
-    room,
 
     initChat,
     sendMessage,

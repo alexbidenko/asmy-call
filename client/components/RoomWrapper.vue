@@ -16,17 +16,13 @@ onMounted(async () => {
   await deviceStore.enumerateDevices()
 
   // Инициализируем сокет (если не был) и подключаемся к комнате
-  if (!webrtcStore.rtcSocket || webrtcStore.room !== roomStore.room) {
-    webrtcStore.initSocket(roomStore.room)
-  }
+  if (!webrtcStore.rtcSocket) webrtcStore.initSocket()
 
   await localStreamStore.init();
 
   webrtcStore.joinWebrtcRoom();
 
-  if (!chatStore.socket || chatStore.room !== roomStore.room) {
-    chatStore.initChat(roomStore.room)
-  }
+  if (!chatStore.socket) chatStore.initChat()
 
   navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
 });

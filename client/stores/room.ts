@@ -1,6 +1,5 @@
 export const useRoomStore = defineStore('room', () => {
   const route = useRoute();
-  const router = useRouter();
   const memberStore = useMemberStore()
   const webrtcStore = useWebrtcStore()
   const audioOutputStore = useAudioOutputStore();
@@ -19,8 +18,6 @@ export const useRoomStore = defineStore('room', () => {
     memberStore.$dispose();
     localStreamStore.$dispose();
     senderStore.$dispose();
-
-    router.push('/');
   };
 
   return {

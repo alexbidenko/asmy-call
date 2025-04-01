@@ -7,6 +7,7 @@ const audioOutputStore = useAudioOutputStore();
 const screenShareStore = useScreenShareStore();
 const roomStore = useRoomStore();
 const localStreamStore = useLocalStreamStore();
+const router = useRouter();
 
 const micMenu = ref()
 const audioMenu = ref()
@@ -21,7 +22,7 @@ const micItems = computed<MenuItem[]>(() =>
     },
     class: deviceStore.selectedAudioInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
-)
+);
 
 const audioItems = computed<MenuItem[]>(() =>
   deviceStore.audioOutputs.map((dev) => ({
@@ -31,7 +32,7 @@ const audioItems = computed<MenuItem[]>(() =>
     },
     class: deviceStore.selectedAudioOutput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
-)
+);
 
 const videoItems = computed<MenuItem[]>(() =>
   deviceStore.videoInputs.map((dev) => ({
@@ -41,7 +42,13 @@ const videoItems = computed<MenuItem[]>(() =>
     },
     class: deviceStore.selectedVideoInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
-)
+);
+
+const exit = async () => {
+  await router.push('/');
+
+  roomStore.$dispose();
+};
 </script>
 
 <template>
@@ -150,7 +157,7 @@ const videoItems = computed<MenuItem[]>(() =>
       </div>
 
       <div class="flex gap-1 p-1 rounded-full bg-primary-400">
-        <Button @click="roomStore.exit" rounded>
+        <Button @click="exit" rounded>
           <template #icon>
             <span class="material-icons-outlined text-red-500 dark:text-red-600">
               phone_disabled

@@ -2,6 +2,16 @@
 import type { RemoteStreamObj } from '~/stores/webrtc'
 import type { MemberType } from '~/stores/member'
 
+type RemoteStreamType = Omit<RemoteStreamObj, 'socketId'> &
+  MemberType &
+  {
+    staticId: string;
+    muted?: boolean;
+    mirrored?: boolean;
+    constraints?: unknown;
+    setRef: (ref: HTMLVideoElement) => void;
+  };
+
 const webrtcStore = useWebrtcStore()
 const localStreamStore = useLocalStreamStore();
 const memberStore = useMemberStore()
@@ -16,14 +26,33 @@ const teleportedId = ref('');
  * Собираем список remoteStreams + username из memberStore
  */
 const streams = computed(() => {
-  // TODO: все еще не идеально с этими ключами
-  const map = new Map<string, RemoteStreamObj & MemberType & { staticId: string }>();
+  const map = new Map<string, RemoteStreamType>();
 
-  // TODO: а тут вообще иногда проблемы с обновлением, если так не считать явно
   const remoteStreams = webrtcStore.remoteStreams;
 
-  // TODO: осталось, что если отключить все стримы, то переход на пустое поле происходит не правильно
-  // TODO: А еще делать бы итерацию по участникам сначала и выводить карточки так, чтобы карточки одного участника были рядом - может тогда и остальное станет проще
+  // TODO: Из-за простого включения и выключения микрофона теперь будет пересчет списка.
+  //  Все из-за constraints, надо бы его оптимизировать как-то.
+  if (localStreamStore.stream) {
+    map.set('local-video', {
+      id: 'local-video',
+      username: userStore.username,
+      stream: localStreamStore.stream,
+      staticId: 'local-video',
+      constraints: localStreamStore.constraints,
+      setRef: (el) => (webrtcStore.localVideo = el),
+    });
+  }
+
+  if (screenShareStore.stream) {
+    map.set('local-screen', {
+      id: 'local-screen',
+      username: userStore.username,
+      stream: screenShareStore.stream,
+      staticId: 'local-screen',
+      setRef: (el) => (screenShareStore.element = el),
+    });
+  }
+
   memberStore.list.forEach((el) => {
     const streams = remoteStreams.filter((s) => s.socketId === el.id);
     streams.forEach((s) => {
@@ -31,6 +60,7 @@ const streams = computed(() => {
         ...s,
         username: el.username,
         staticId: s.id,
+        setRef: (el) => setRemoteRef(el, s.id),
       })
     })
   });
@@ -41,6 +71,7 @@ const streams = computed(() => {
       ...s,
       username: 'Unknown',
       staticId: s.id,
+      setRef: (el) => setRemoteRef(el, s.id),
     })
   });
 
@@ -92,75 +123,22 @@ watch(teleportedId, (v) => {
       >
         <LayoutGroup>
           <AnimatePresence>
-            <Motion
-              v-if="localStreamStore.stream"
-              key="local-video"
-              layout
-              :initial="{ opacity: 0 }"
-              :animate="{ opacity: 1, transition: { delay: 0.5 } }"
-              :exit="{ opacity: 0 }"
-              :class="{
-                'col-1 row-start-1 row-end-(--stream-count)': teleportedId === 'local-video',
-                'w-64 col-2 row-auto': teleportedId && teleportedId !== 'local-video',
-              }"
-            >
-              <VideoItem
-                @teleport="toggleTeleportId('local-video')"
-                :video-ref="(el) => (webrtcStore.localVideo = el)"
-                :stream="localStreamStore.stream"
-                :opened="teleportedId === 'local-video'"
-                :username="userStore.username"
-                muted
-                mirrored
-                :constraints="localStreamStore.constraints"
-                :class="teleportedId === 'local-video' && 'full-area'"
-              />
-            </Motion>
-
-            <Motion
-              v-if="screenShareStore.stream"
-              key="local-screen"
-              layout
-              :initial="{ opacity: 0 }"
-              :animate="{ opacity: 1, transition: { delay: 0.5 } }"
-              :exit="{ opacity: 0 }"
-              :class="{
-                'col-1 row-start-1 row-end-(--stream-count)': teleportedId === 'local-screen',
-                'w-64 col-2 row-auto': teleportedId && teleportedId !== 'local-screen',
-              }"
-            >
-              <VideoItem
-                @teleport="toggleTeleportId('local-screen')"
-                :video-ref="(el) => (screenShareStore.element = el)"
-                :stream="screenShareStore.stream"
-                :opened="teleportedId === 'local-screen'"
-                :username="userStore.username"
-                muted
-                :class="teleportedId === 'local-screen' && 'full-area'"
-              />
-            </Motion>
-
-            <Motion
+            <VideoItem
               v-for="obj in streams"
               :key="`stream-${obj.staticId}`"
-              layout
-              :initial="{ opacity: 0 }"
-              :animate="{ opacity: 1 }"
-              :exit="{ opacity: 0 }"
+              @teleport="toggleTeleportId(`stream-${obj.id}`)"
+              :video-ref="obj.setRef"
+              :stream="obj.stream"
+              :opened="teleportedId === `stream-${obj.id}`"
+              :username="obj.username || 'TODO'"
+              :muted="obj.muted"
+              :mirrored="obj.mirrored"
+              :constraints="obj.constraints"
               :class="{
                 'col-1 row-start-1 row-end-(--stream-count)': teleportedId === `stream-${obj.id}`,
                 'w-64 col-2 row-auto': teleportedId && teleportedId !== `stream-${obj.id}`,
               }"
-            >
-              <VideoItem
-                @teleport="toggleTeleportId(`stream-${obj.id}`)"
-                :video-ref="(el) => setRemoteRef(el, obj.id)"
-                :stream="obj.stream"
-                :opened="teleportedId === `stream-${obj.id}`"
-                :username="obj.username || 'TODO'"
-                :class="teleportedId === `stream-${obj.id}` && 'full-area'"
-              />
-            </Motion>
+            />
           </AnimatePresence>
         </LayoutGroup>
       </Motion>

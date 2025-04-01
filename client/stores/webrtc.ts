@@ -12,13 +12,13 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const localStreamStore = useLocalStreamStore();
   const memberStore = useMemberStore();
   const senderStore = useSenderStore();
+  const roomStore = useRoomStore();
 
   // -------------------
   // State (Composition API refs)
   // -------------------
   const rtcSocket = ref<Socket | null>(null)
   const mySocketId = ref('')
-  const room = ref('')
   const remoteStreams = ref<RemoteStreamObj[]>([])
   const peerConnections = ref<Record<string, RTCPeerConnection>>({})
 
@@ -35,13 +35,12 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // --------------------------------------------------
   // initSocket, joinWebrtcRoom
   // --------------------------------------------------
-  const initSocket = (r: string) => {
+  const initSocket = () => {
     const config = useRuntimeConfig()
 
     if (rtcSocket.value) {
       rtcSocket.value.disconnect()
     }
-    room.value = r
     remoteStreams.value = []
     peerConnections.value = {}
     remoteTracks.value = []
@@ -86,13 +85,13 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     })
 
     rtcSocket.value.on('user-left', (data) => {
-      const socketId = data.socketId
-      if (peerConnections.value[socketId]) {
-        peerConnections.value[socketId].close()
-        delete peerConnections.value[socketId]
+      if (peerConnections.value[data.socketId]) {
+        peerConnections.value[data.socketId].close()
+        delete peerConnections.value[data.socketId]
       }
-      remoteStreams.value = remoteStreams.value.filter((r) => r.socketId !== socketId)
-      memberStore.leave(socketId)
+      delete negotiationInProgress[data.socketId];
+      remoteStreams.value = remoteStreams.value.filter((r) => r.socketId !== data.socketId)
+      memberStore.leave(data.socketId)
     })
 
     // Запускаем локальный стрим (камера/микрофон) — если хотим "автоматически"
@@ -103,7 +102,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const joinWebrtcRoom = () => {
     const userStore = useUserStore()
     rtcSocket.value?.emit('joinWebrtcRoom', {
-      room: room.value,
+      room: roomStore.room,
       username: userStore.username
     })
   }
@@ -120,7 +119,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     pc.onicecandidate = (evt) => {
       if (evt.candidate) {
         rtcSocket.value?.emit('webrtcSignal', {
-          room: room.value,
+          room: roomStore.room,
           from: mySocketId.value,
           to: remoteId,
           signalData: { candidate: evt.candidate }
@@ -161,7 +160,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
         if (pc.localDescription) {
           rtcSocket.value?.emit('webrtcSignal', {
-            room: room.value,
+            room: roomStore.room,
             from: mySocketId.value,
             to: remoteId,
             signalData: { sdp: pc.localDescription }
@@ -246,7 +245,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     await pc.setLocalDescription(offer);
     if (pc.localDescription) {
       rtcSocket.value?.emit('webrtcSignal', {
-        room: room.value,
+        room: roomStore.room,
         from: mySocketId.value,
         to: remoteId,
         signalData: { sdp: pc.localDescription }
@@ -266,7 +265,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     if (pc.localDescription) {
       rtcSocket.value?.emit('webrtcSignal', {
-        room: room.value,
+        room: roomStore.room,
         from: mySocketId.value,
         to: remoteId,
         signalData: { sdp: pc.localDescription }
@@ -512,11 +511,11 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   });
 
   watch(() => localStreamStore.constraints, () => {
-    updateLocalStreamForRemote();
+    void updateLocalStreamForRemote();
   }, { deep: true });
 
-  watch(() => screenShareStore.stream, async (screen, prev) => {
-    updateScreenShareForRemote(screen, prev);
+  watch(() => screenShareStore.stream, (screen, prev) => {
+    void updateScreenShareForRemote(screen, prev);
   });
 
   onBeforeUnmount(() => {
@@ -531,7 +530,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
   return {
     rtcSocket,
-    room,
     remoteStreams,
     localVideo,
 
