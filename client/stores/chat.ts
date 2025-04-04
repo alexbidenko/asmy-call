@@ -1,10 +1,10 @@
-import { io, Socket } from 'socket.io-client'
+import { Socket, io } from 'socket.io-client'
 
-export interface ChatMessage {
+export type ChatMessage = {
   name: string
   text: string
   socketId: string
-}
+};
 
 export const useChatStore = defineStore('chat', () => {
   const interfaceStore = useInterfaceStore();

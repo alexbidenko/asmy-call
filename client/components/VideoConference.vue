@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { RemoteStreamObj } from '~/stores/webrtc'
 import type { MemberType } from '~/stores/member'
+import type { RemoteStreamObj } from '~/stores/webrtc'
 
 type RemoteStreamType = Omit<RemoteStreamObj, 'socketId'> &
   MemberType &
@@ -56,6 +56,12 @@ const streams = computed(() => {
     });
   }
 
+  const setRemoteRef = (el: HTMLVideoElement, streamObj: RemoteStreamObj) => {
+    if (el && streamObj) {
+      el.srcObject = streamObj.stream
+    }
+  };
+
   memberStore.list.forEach((el) => {
     const streams = remoteStreams.filter((s) => s.socketId === el.id);
     streams.forEach((s) => {
@@ -63,7 +69,7 @@ const streams = computed(() => {
         ...s,
         username: el.username,
         staticId: s.id,
-        setRef: (el) => setRemoteRef(el, s.id),
+        setRef: (el) => setRemoteRef(el, s),
       })
     })
   });
@@ -74,7 +80,7 @@ const streams = computed(() => {
       ...s,
       username: 'Unknown',
       staticId: s.id,
-      setRef: (el) => setRemoteRef(el, s.id),
+      setRef: (el) => setRemoteRef(el, s),
     })
   });
 
@@ -83,15 +89,6 @@ const streams = computed(() => {
 
 const toggleTeleportId = (id: string) => {
   teleportedId.value = teleportedId.value === id ? '' : id;
-}
-
-function setRemoteRef(el: HTMLVideoElement | null, streamId: string) {
-  if (!el) return
-  const found = webrtcStore.remoteStreams.find((r) => r.id === streamId)
-  if (found) {
-    el.srcObject = found.stream
-    el.id = 'video-' + streamId
-  }
 }
 
 watch([() => localStreamStore.stream, () => screenShareStore.stream, () => webrtcStore.remoteStreams], () => {
@@ -115,33 +112,33 @@ watch(teleportedId, (v) => {
   >
     <AnimatePresence>
       <Motion
-        v-show="interfaceStore.isMembersVisible"
         as="div"
         layout
         class="grid gap-2 p-area h-fit w-full"
-        :class="{
+        :class="[{
           'grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 @7xl:grid-cols-4 w-full': !teleportedId,
-          'grid-cols-[1fr_auto] grid-rows-(--rows-style) !pb-0 min-h-full': teleportedId,
-        }"
+          'grid-rows-(--rows-style) !pb-0 min-h-full': teleportedId,
+        }, teleportedId && (interfaceStore.isMembersVisible ? 'grid-cols-1' : 'grid-cols-[1fr_auto]')]"
       >
         <LayoutGroup>
           <AnimatePresence>
-            <VideoItem
-              v-for="obj in streams"
-              :key="`stream-${obj.staticId}`"
-              @teleport="toggleTeleportId(`stream-${obj.id}`)"
-              :video-ref="obj.setRef"
-              :stream="obj.stream"
-              :opened="teleportedId === `stream-${obj.id}`"
-              :username="obj.username || 'TODO'"
-              :muted="obj.muted"
-              :mirrored="obj.mirrored"
-              :constraints="obj.constraints"
-              :class="{
-                'col-1 row-start-1 row-end-(--stream-count)': teleportedId === `stream-${obj.id}`,
-                'w-64 col-2 row-auto': teleportedId && teleportedId !== `stream-${obj.id}`,
-              }"
-            />
+            <template v-for="obj in streams" :key="`stream-${obj.staticId}`">
+              <VideoItem
+                v-show="!teleportedId || teleportedId === `stream-${obj.id}` || interfaceStore.isMembersVisible"
+                @teleport="toggleTeleportId(`stream-${obj.id}`)"
+                :video-ref="obj.setRef"
+                :stream="obj.stream"
+                :opened="teleportedId === `stream-${obj.id}`"
+                :username="obj.username || 'TODO'"
+                :muted="obj.muted"
+                :mirrored="obj.mirrored"
+                :constraints="obj.constraints"
+                :class="{
+                  'col-1 row-start-1 row-end-(--stream-count)': teleportedId === `stream-${obj.id}`,
+                  'w-64 col-2 row-auto': teleportedId && teleportedId !== `stream-${obj.id}`,
+                }"
+              />
+            </template>
           </AnimatePresence>
         </LayoutGroup>
       </Motion>

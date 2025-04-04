@@ -9,7 +9,8 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "upgrade": "nuxt upgrade -f",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "lint": "oxlint --config .oxlintrc.json"
   },
   "dependencies": {
     "@primevue/forms": "4.3.3",
@@ -33,6 +34,7 @@
     "@primevue/nuxt-module": "4.3.3",
     "@vite-pwa/nuxt": "0.10.8",
     "nuxt-security": "2.2.0",
+    "oxlint": "0.16.4",
     "vue-tsc": "2.2.8"
   }
 }

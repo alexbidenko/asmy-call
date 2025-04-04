@@ -37,7 +37,7 @@ let source: MediaStreamAudioSourceNode | null = null
 let dataArray: Uint8Array | null = null
 let rafId: number | null = null
 
-function setupAudioAnalyser(stream: MediaStream) {
+const setupAudioAnalyser = (stream: MediaStream) => {
   // Если уже есть AudioContext — глушим
   cleanupAudioAnalyser()
 
@@ -52,20 +52,20 @@ function setupAudioAnalyser(stream: MediaStream) {
 
     // Запускаем анимацию
     animate()
-  } catch (e) {
-    console.warn('[Audio Analyser] setup error:', e)
+  } catch (error) {
+    console.warn('[Audio Analyser] setup error:', error)
   }
-}
+};
 
-function animate() {
+const animate = () => {
   if (!analyser || !dataArray) return
 
   rafId = requestAnimationFrame(animate)
   analyser.getByteTimeDomainData(dataArray)
 
   let sum = 0
-  for (let i = 0; i < dataArray.length; i++) {
-    const val = dataArray[i] - 128
+  for (const item of dataArray) {
+    const val = item - 128
     sum += Math.abs(val)
   }
   const avg = sum / dataArray.length  // ~0..128
@@ -75,9 +75,9 @@ function animate() {
   amplitudeHistory.value.push(amplitude.value);
 
   audioEnabled.value = !amplitudeHistory.value.some((v) => !v);
-}
+};
 
-function cleanupAudioAnalyser() {
+const cleanupAudioAnalyser = () => {
   if (rafId) {
     cancelAnimationFrame(rafId)
     rafId = null
@@ -94,7 +94,7 @@ function cleanupAudioAnalyser() {
     // audioContext.close()  // по желанию, но закрывать может убить и другие источники
     audioContext = null
   }
-}
+};
 
 // Когда этот компонент демонтируется, чистим
 onUnmounted(() => {
@@ -108,12 +108,12 @@ const localVideoEl = ref<HTMLVideoElement|null>(null)
 
 // Юзер вам передаёт prop: videoRef – колбэк.
 // Вы можете в нём также сохранить себе локально ссылку.
-function videoRefLocal(el: HTMLVideoElement) {
+const videoRefLocal = (el: HTMLVideoElement) => {
   if (el === localVideoEl.value) return;
 
   props.videoRef(el)  // чтобы внешний код тоже работал
   localVideoEl.value = el
-}
+};
 
 // ----------------------------
 // Анимация / визуализация

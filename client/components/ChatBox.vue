@@ -2,12 +2,12 @@
 const chatStore = useChatStore()
 const text = ref('')
 
-function onSend() {
+const onSend = () => {
   if (!text.value.trim()) return;
 
   chatStore.sendMessage(text.value.trim())
   text.value = '';
-}
+};
 </script>
 
 <template>

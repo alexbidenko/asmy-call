@@ -1,8 +1,8 @@
-export interface DeviceInfo {
+export type DeviceInfo = {
   deviceId: string
   label: string
   kind: MediaDeviceKind
-}
+};
 
 export const useDeviceStore = defineStore('device', () => {
   const audioInputs = ref<DeviceInfo[]>([])

@@ -1,0 +1,30 @@
+{
+  "plugins": [
+    "oxc",
+    "typescript",
+    "unicorn",
+    "import"
+  ],
+  "categories": {
+    "style": "error"
+  },
+  "rules": {
+    "no-unused-vars": [
+      2,
+      { "varsIgnorePattern": "^_" }
+    ],
+    "consistent-indexed-object-style": ["error", "record"],
+    "yoda": ["error", "never"],
+    "consistent-type-definitions": ["error", "type"],
+
+    "filename-case": "off",
+    "no-null": "off",
+    "sort-keys": "off",
+    "no-magic-numbers": "off",
+    "no-continue": "off",
+    "curly": "off",
+    "no-ternary": "off",
+    "no-anonymous-default-export": "off",
+    "exports-last": "off"
+  }
+}

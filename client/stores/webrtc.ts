@@ -1,10 +1,10 @@
-import {io, Socket} from 'socket.io-client'
+import { type Socket, io } from 'socket.io-client'
 
-export interface RemoteStreamObj {
-  id: string
-  socketId: string
-  stream: MediaStream
-}
+export type RemoteStreamObj = {
+  id: string;
+  socketId: string;
+  stream: MediaStream;
+};
 
 export const useWebrtcStore = defineStore('webrtc', () => {
   const screenShareStore = useScreenShareStore();
@@ -38,9 +38,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const initSocket = () => {
     const config = useRuntimeConfig()
 
-    if (rtcSocket.value) {
-      rtcSocket.value.disconnect()
-    }
+    rtcSocket.value?.disconnect()
     remoteStreams.value = []
     peerConnections.value = {}
     remoteTracks.value = []
@@ -154,9 +152,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       try {
         negotiationInProgress[remoteId] = true;
 
-        const offer = await pc.createOffer()
-
-        await pc.setLocalDescription(offer);
+        await pc.setLocalDescription();
 
         if (pc.localDescription) {
           rtcSocket.value?.emit('webrtcSignal', {
@@ -233,16 +229,15 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
 
     console.log('[doOffer] =>', remoteId)
-    const offer = await pc.createOffer()
 
     if (pc.signalingState !== 'stable') {
-      console.warn(`[doOffer] ABORTING => state changed to ${pc.signalingState} after createOffer, likely glare. Aborting our offer for ${remoteId}.`);
+      console.warn(`[doOffer] ABORTING => state changed to ${pc.signalingState}, likely glare. Aborting our offer for ${remoteId}.`);
       // Просто выходим. Входящий offer будет обработан в handleSignal -> doAnswer.
       // Можно также установить флаг, что нужно пересогласование позже, если требуется.
       return;
     }
 
-    await pc.setLocalDescription(offer);
+    await pc.setLocalDescription();
     if (pc.localDescription) {
       rtcSocket.value?.emit('webrtcSignal', {
         room: roomStore.room,
@@ -280,7 +275,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       const candidate = new RTCIceCandidate(signalData.candidate);
 
       console.log('[handleSignal] candidate from=', from)
-      if (!pc.localDescription) pendingCandidate.value.push(candidate)
+      if (!pc.remoteDescription) pendingCandidate.value.push(candidate)
       else await pc.addIceCandidate(candidate)
     } catch (error) {
       console.error('[handleCandidateSignal] add ice candidate failed from=', from, 'remoteDescription=', pc.localDescription, error);
@@ -305,8 +300,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     try {
       await pc.setRemoteDescription(sdp);
-    } catch (err) {
-      console.error('[handleSignal] setRemoteDescription error:', err)
+    } catch (error) {
+      console.error('[handleSignal] setRemoteDescription error:', error)
       return
     }
 
@@ -316,7 +311,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
 
     try {
-      pendingCandidate.value.forEach(pc.addIceCandidate);
+      pendingCandidate.value.forEach((el) => pc.addIceCandidate(el));
       pendingCandidate.value = [];
     } catch (error) {
       console.error('[handleDescriptionSignal] add ice candidate failed from=', from, 'remoteDescription=', pc.localDescription, error);
@@ -418,8 +413,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
           console.log('[_updateRemoteTracks] MASTER -> doOffer for', remoteId)
           try {
             await doOffer(pc, remoteId)
-          } catch (err) {
-            console.warn('[_updateRemoteTracks] doOffer failed', err)
+          } catch (error) {
+            console.warn('[_updateRemoteTracks] doOffer failed', error)
           } finally {
             delete negotiationInProgress[remoteId]
           }
@@ -447,8 +442,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
           try {
             const sender = pc.addTrack(sVid, screen);
             senderStore.save(SenderTypeEnum.screen, remoteId, sender);
-          } catch (err) {
-            console.warn(`[startScreenShare] addTrack (video) failed:`, err)
+          } catch (error) {
+            console.warn(`[startScreenShare] addTrack (video) failed:`, error)
           }
         }
         const sAud = screen.getAudioTracks()[0] || null
@@ -456,8 +451,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
           try {
             const sender = pc.addTrack(sAud, screen);
             senderStore.save(SenderTypeEnum.screen, remoteId, sender);
-          } catch (err) {
-            console.warn(`[startScreenShare] addTrack (audio) failed:`, err)
+          } catch (error) {
+            console.warn(`[startScreenShare] addTrack (audio) failed:`, error)
           }
         }
       }
@@ -475,8 +470,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
             if (sender) {
               try {
                 pc.removeTrack(sender)
-              } catch (err) {
-                console.warn('[stopScreenShare] removeTrack fail:', err)
+              } catch (error) {
+                console.warn('[stopScreenShare] removeTrack fail:', error)
               }
             }
           })
