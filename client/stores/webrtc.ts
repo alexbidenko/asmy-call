@@ -94,7 +94,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     // Запускаем локальный стрим (камера/микрофон) — если хотим "автоматически"
     // (если user сам потом включает кнопкой, можно убрать эту строку)
-    updateLocalStreamForRemote()
+    updateLocalStream()
   }
 
   const joinWebrtcRoom = () => {
@@ -104,6 +104,15 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       username: userStore.username
     })
   }
+
+  const sendSignal = (remoteId: string, data: any) => {
+    rtcSocket.value?.emit('webrtcSignal', {
+      room: roomStore.room,
+      from: mySocketId.value,
+      to: remoteId,
+      signalData: data,
+    })
+  };
 
   const createPeerConnection = (remoteId: string) => {
     if (peerConnections.value[remoteId]) return peerConnections.value[remoteId]
@@ -115,14 +124,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     transceivers.value[remoteId] = pc;
 
     pc.onicecandidate = (evt) => {
-      if (evt.candidate) {
-        rtcSocket.value?.emit('webrtcSignal', {
-          room: roomStore.room,
-          from: mySocketId.value,
-          to: remoteId,
-          signalData: { candidate: evt.candidate }
-        })
-      }
+      if (evt.candidate) sendSignal(remoteId, { candidate: evt.candidate.toJSON() });
     }
 
     pc.oniceconnectionstatechange = () => {
@@ -154,14 +156,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
         await pc.setLocalDescription();
 
-        if (pc.localDescription) {
-          rtcSocket.value?.emit('webrtcSignal', {
-            room: roomStore.room,
-            from: mySocketId.value,
-            to: remoteId,
-            signalData: { sdp: pc.localDescription }
-          })
-        }
+        if (pc.localDescription) sendSignal(remoteId, { sdp: pc.localDescription });
       } catch (error) {
         console.error('[onnegotiationneeded] process failed:', error);
       } finally {
@@ -179,21 +174,14 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       }
     }
 
-    if (localStreamStore.stream) {
-      for (const track of localStreamStore.stream.getTracks()) {
-        const sender = pc.addTrack(track, localStreamStore.stream);
-        senderStore.save(SenderTypeEnum.default, remoteId, sender);
-      }
-    }
-    if (screenShareStore.stream) {
-      screenShareStore.stream.getTracks().forEach(track => {
-        if (track.readyState === 'live') {
-          pc.addTrack(track, screenShareStore.stream!)
-        }
-      })
-    }
+    (async () => {
+      await updateLocalStreamForRemote(remoteId, pc);
+      await updateScreenShareForRemote(remoteId, pc, screenShareStore.stream, null);
+      await updateStreamSdpForRemote(remoteId, pc);
+    })();
 
     peerConnections.value[remoteId] = pc;
+
     return pc
   }
 
@@ -222,25 +210,16 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const handleLocalDescription = async (pc: RTCPeerConnection, remoteId: string) => {
     await pc.setLocalDescription();
 
-    if (pc.localDescription) {
-      rtcSocket.value?.emit('webrtcSignal', {
-        room: roomStore.room,
-        from: mySocketId.value,
-        to: remoteId,
-        signalData: { sdp: pc.localDescription }
-      })
-    }
+    if (pc.localDescription) sendSignal(remoteId, { sdp: pc.localDescription });
   };
 
   const handleCandidateSignal = async (pc: RTCPeerConnection, payload: any) => {
     const { from, signalData } = payload;
 
     try {
-      const candidate = new RTCIceCandidate(signalData.candidate);
-
       console.log('[handleSignal] candidate from=', from)
-      if (!pc.remoteDescription) pendingCandidate.value.push(candidate)
-      else await pc.addIceCandidate(candidate)
+      if (!pc.remoteDescription) pendingCandidate.value.push(signalData.candidate)
+      else await pc.addIceCandidate(signalData.candidate)
     } catch (error) {
       console.error('[handleCandidateSignal] add ice candidate failed from=', from, 'remoteDescription=', pc.localDescription, error);
     }
@@ -274,12 +253,12 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       await handleLocalDescription(pc, from);
     }
 
-    try {
-      pendingCandidate.value.forEach((el) => pc.addIceCandidate(el));
-      pendingCandidate.value = [];
-    } catch (error) {
-      console.error('[handleDescriptionSignal] add ice candidate failed from=', from, 'remoteDescription=', pc.localDescription, error);
-    }
+    const candidates = pendingCandidate.value;
+    pendingCandidate.value = [];
+    await Promise.allSettled(candidates.map((el) => pc.addIceCandidate(el))).then((result) => {
+      const errors = result.filter((el) => el.status === 'rejected');
+      if (errors.length) console.error('[handleDescriptionSignal] add pending ice candidate errors:', errors);
+    });
   };
 
   const handleSignal = async (payload: any) => {
@@ -314,156 +293,153 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
   }
 
-  const updateLocalStreamForRemote = async () => {
+  const updateLocalStreamForRemote = async (remoteId: string, pc: RTCPeerConnection) => {
+    if (!localStreamStore.stream) return
+
+    const nextAudio = localStreamStore.stream.getAudioTracks()[0];
+    const nextVideo = localStreamStore.stream.getVideoTracks()[0];
+    const {
+      audio: prevAudio,
+      video: prevVideo,
+    } = senderStore.find(SenderTypeEnum.default, remoteId);
+
+    await Promise.allSettled([
+      (async () => {
+        if (!localStreamStore.stream) return;
+
+        if (nextAudio && !prevAudio) {
+          const sender = pc.addTrack(nextAudio, localStreamStore.stream)
+          senderStore.save(SenderTypeEnum.default, remoteId, sender);
+        } else if (!nextAudio && prevAudio) {
+          senderStore.remove(SenderTypeEnum.default, remoteId, prevAudio);
+          pc.removeTrack(prevAudio);
+        } else if (nextAudio && prevAudio) {
+          await prevAudio.replaceTrack(nextAudio);
+        }
+      })(),
+      (async () => {
+        if (!localStreamStore.stream) return;
+
+        if (nextVideo && !prevVideo) {
+          const sender = pc.addTrack(nextVideo, localStreamStore.stream)
+          senderStore.save(SenderTypeEnum.default, remoteId, sender);
+        } else if (!nextVideo && prevVideo) {
+          senderStore.remove(SenderTypeEnum.default, remoteId, prevVideo);
+          pc.removeTrack(prevVideo);
+        } else if (nextVideo && prevVideo) {
+          await prevVideo.replaceTrack(nextVideo);
+        }
+      })(),
+    ]);
+  };
+
+  const updateStreamSdpForRemote = async (remoteId: string, pc: RTCPeerConnection) => {
+    if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
+      negotiationInProgress[remoteId] = true
+      console.log('[_updateRemoteTracks] MASTER -> doOffer for', remoteId)
+      try {
+        await handleLocalDescription(pc, remoteId)
+      } catch (error) {
+        console.warn('[_updateRemoteTracks] doOffer failed', error)
+      } finally {
+        delete negotiationInProgress[remoteId]
+      }
+    } else {
+      console.warn('[masterForceOffer] skip => state=', pc.signalingState)
+    }
+  }
+
+  const updateLocalStream = async () => {
     if (!localStreamStore.stream) return
 
     void deviceStore.enumerateDevices()
 
-    // Обходим всех PC
-    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
-      if (pc.signalingState === 'closed') {
-        continue
-      }
+    await Promise.allSettled(Object.entries(transceivers.value).map(([remoteId, pc]) => {
+      if (pc.signalingState === 'closed') return;
 
-      const nextAudio = localStreamStore.stream.getAudioTracks()[0];
-      const nextVideo = localStreamStore.stream.getVideoTracks()[0];
-      const {
-        audio: prevAudio,
-        video: prevVideo,
-      } = senderStore.find(SenderTypeEnum.default, remoteId);
+      return updateLocalStreamForRemote(remoteId, pc);
+    })).then((result) => {
+      const errors = result.filter((el) => el.status === 'rejected');
+      if (errors.length) console.error('[updateLocalStream] update stream for remote errors:', errors);
+    });
 
-      await Promise.allSettled([
-        (async () => {
-          if (!localStreamStore.stream) return;
-
-          if (nextAudio && !prevAudio) {
-            const sender = pc.addTrack(nextAudio, localStreamStore.stream)
-            senderStore.save(SenderTypeEnum.default, remoteId, sender);
-          } else if (!nextAudio && prevAudio) {
-            senderStore.remove(SenderTypeEnum.default, remoteId, prevAudio);
-            pc.removeTrack(prevAudio);
-          } else if (nextAudio && prevAudio) {
-            await prevAudio.replaceTrack(nextAudio);
-          }
-        })(),
-        (async () => {
-          if (!localStreamStore.stream) return;
-
-          if (nextVideo && !prevVideo) {
-            const sender = pc.addTrack(nextVideo, localStreamStore.stream)
-            senderStore.save(SenderTypeEnum.default, remoteId, sender);
-          } else if (!nextVideo && prevVideo) {
-            senderStore.remove(SenderTypeEnum.default, remoteId, prevVideo);
-            pc.removeTrack(prevVideo);
-          } else if (nextVideo && prevVideo) {
-            await prevVideo.replaceTrack(nextVideo);
-          }
-        })(),
-      ]);
-    }
-
-    // 2) Обновляем SDP
-    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
-      if (pc.signalingState === 'closed') {
-        continue
-      }
+    await Promise.allSettled(Object.entries(transceivers.value).map(([remoteId, pc]) => {
+      if (pc.signalingState === 'closed') return;
 
       if (mySocketId.value > remoteId) {
         // я SLAVE, пропускаем
       } else {
         // я MASTER => doOffer
-        if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
-          negotiationInProgress[remoteId] = true
-          console.log('[_updateRemoteTracks] MASTER -> doOffer for', remoteId)
-          try {
-            await handleLocalDescription(pc, remoteId)
-          } catch (error) {
-            console.warn('[_updateRemoteTracks] doOffer failed', error)
-          } finally {
-            delete negotiationInProgress[remoteId]
-          }
-        } else {
-          console.warn('[masterForceOffer] skip => state=', pc.signalingState)
-        }
+        return updateStreamSdpForRemote(remoteId, pc);
       }
-    }
+    })).then((result) => {
+      const errors = result.filter((el) => el.status === 'rejected');
+      if (errors.length) console.error('[updateLocalStream] update stream sdp for remote errors:', errors);
+    });
 
     await slaveForceOffer()
   }
 
-  const updateScreenShareForRemote = async (screen: MediaStream | null, prev: MediaStream | null) => {
-    let didOffer = false;
-
+  const updateScreenShareForRemote = async (remoteId: string, pc: RTCPeerConnection, screen: MediaStream | null, prev: MediaStream | null) => {
     if (screen) {
-      for (const [remoteId, pc] of Object.entries(transceivers.value)) {
-        if (pc.signalingState === 'closed') {
-          console.log(`[startScreenShare] skip PC ${remoteId}, because signalingState=closed`)
-          continue
-        }
-
-        const sVid = screen.getVideoTracks()[0] || null
-        if (sVid) {
-          try {
-            const sender = pc.addTrack(sVid, screen);
-            senderStore.save(SenderTypeEnum.screen, remoteId, sender);
-          } catch (error) {
-            console.warn(`[startScreenShare] addTrack (video) failed:`, error)
-          }
-        }
-        const sAud = screen.getAudioTracks()[0] || null
-        if (sAud) {
-          try {
-            const sender = pc.addTrack(sAud, screen);
-            senderStore.save(SenderTypeEnum.screen, remoteId, sender);
-          } catch (error) {
-            console.warn(`[startScreenShare] addTrack (audio) failed:`, error)
-          }
+      const sVid = screen.getVideoTracks()[0] || null
+      if (sVid) {
+        try {
+          const sender = pc.addTrack(sVid, screen);
+          senderStore.save(SenderTypeEnum.screen, remoteId, sender);
+        } catch (error) {
+          console.warn(`[startScreenShare] addTrack (video) failed:`, error)
         }
       }
-
-      didOffer = true;
+      const sAud = screen.getAudioTracks()[0] || null
+      if (sAud) {
+        try {
+          const sender = pc.addTrack(sAud, screen);
+          senderStore.save(SenderTypeEnum.screen, remoteId, sender);
+        } catch (error) {
+          console.warn(`[startScreenShare] addTrack (audio) failed:`, error)
+        }
+      }
     } else {
       if (prev) {
-        for (const [remoteId, pc] of Object.entries(transceivers.value)) {
-          if (pc.signalingState === 'closed') {
-            console.log('[stopScreenShare] skip closed PC remoteId=', remoteId)
-            continue
-          }
-
-          prev.getTracks().forEach((track) => {
-            const sender = senderStore.remove(SenderTypeEnum.screen, remoteId, track);
-            if (sender) {
-              try {
-                pc.removeTrack(sender)
-              } catch (error) {
-                console.warn('[stopScreenShare] removeTrack fail:', error)
-              }
-            }
-          })
-        }
-      }
-
-      for (const [remoteId, pc] of Object.entries(transceivers.value)) {
-        if (pc.signalingState === 'closed') continue
-        if (mySocketId.value < remoteId) {
-          if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
-            negotiationInProgress[remoteId] = true
-            console.log('[stopScreenShare] master => doOffer to', remoteId)
+        prev.getTracks().forEach((track) => {
+          const sender = senderStore.remove(SenderTypeEnum.screen, remoteId, track);
+          if (sender) {
             try {
-              await handleLocalDescription(pc, remoteId)
-            } finally {
-              delete negotiationInProgress[remoteId]
+              pc.removeTrack(sender)
+            } catch (error) {
+              console.warn('[stopScreenShare] removeTrack fail:', error)
             }
           }
-          didOffer = true
+        })
+      }
+
+      if (mySocketId.value < remoteId) {
+        if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
+          negotiationInProgress[remoteId] = true
+          console.log('[stopScreenShare] master => doOffer to', remoteId)
+          try {
+            await handleLocalDescription(pc, remoteId)
+          } finally {
+            delete negotiationInProgress[remoteId]
+          }
         }
       }
     }
+  };
 
-    if (!didOffer) {
-      console.log('[updateScreenShare] => slaveForceOffer()')
-      await slaveForceOffer()
+  const updateScreenShare = async (screen: MediaStream | null, prev: MediaStream | null) => {
+    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
+      if (pc.signalingState === 'closed') {
+        console.log(`[startScreenShare] skip PC ${remoteId}, because signalingState=closed`)
+        continue
+      }
+
+      await updateScreenShareForRemote(remoteId, pc, screen, prev);
     }
+
+    console.log('[updateScreenShare] => slaveForceOffer()')
+    await slaveForceOffer()
   };
 
   watch(localVideo, (element) => {
@@ -471,11 +447,11 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   });
 
   watch(() => localStreamStore.constraints, () => {
-    void updateLocalStreamForRemote();
+    void updateLocalStream();
   }, { deep: true });
 
   watch(() => screenShareStore.stream, (screen, prev) => {
-    void updateScreenShareForRemote(screen, prev);
+    void updateScreenShare(screen, prev);
   });
 
   onBeforeUnmount(() => {
