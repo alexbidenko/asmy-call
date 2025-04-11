@@ -28,7 +28,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // На каждого удалённого: (mic / sysAudio / cam / screen)
   const transceivers = ref<Record<string, RTCPeerConnection>>({})
 
-  const negotiationInProgress = reactive<Record<string, boolean>>({});
   // Объект для хранения очередей переговоров по каждому remoteId в виде цепочки Promise
   const negotiationQueues = reactive<Record<string, Promise<void>>>({});
   const pendingCandidate = ref<RTCIceCandidate[]>([]);
@@ -65,8 +64,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       memberStore.join({ id: data.socketId, username: data.username });
 
       if (mySocketId.value < data.socketId) {
-        if (pc.signalingState === 'stable' && !negotiationInProgress[data.socketId]) {
-          negotiationInProgress[data.socketId] = true;
+        if (pc.signalingState === 'stable') {
           console.log('[user-joined] => doOffer to new user', data.socketId);
           await enqueueNegotiation(data.socketId, pc);
         }
@@ -85,7 +83,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
         peerConnections.value[data.socketId].close();
         delete peerConnections.value[data.socketId];
       }
-      delete negotiationInProgress[data.socketId];
       remoteStreams.value = remoteStreams.value.filter((r) => r.socketId !== data.socketId);
       memberStore.leave(data.socketId);
     })
@@ -321,7 +318,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     if (
       sdpDescription.type === 'offer' &&
-      (negotiationInProgress[from] || pc.signalingState !== 'stable') &&
+      pc.signalingState !== 'stable' &&
       mySocketId.value < from
     ) {
       console.log('[handleSignal] Remote offer skipped from=', from);
@@ -375,8 +372,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const slaveForceOffer = async () => {
     for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (mySocketId.value > remoteId) {
-        if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
-          negotiationInProgress[remoteId] = true
+        if (pc.signalingState === 'stable') {
           console.log('[slaveForceOffer] => doOffer, me=', mySocketId.value, '->', remoteId)
           await enqueueNegotiation(remoteId, pc);
         } else {
@@ -427,8 +423,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   };
 
   const updateStreamSdpForRemote = async (remoteId: string, pc: RTCPeerConnection) => {
-    if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
-      negotiationInProgress[remoteId] = true
+    if (pc.signalingState === 'stable') {
       console.log('[_updateRemoteTracks] MASTER -> doOffer for', remoteId)
       await enqueueNegotiation(remoteId, pc);
     } else {
@@ -509,8 +504,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       }
 
       if (mySocketId.value < remoteId) {
-        if (pc.signalingState === 'stable' && !negotiationInProgress[remoteId]) {
-          negotiationInProgress[remoteId] = true
+        if (pc.signalingState === 'stable') {
           console.log('[stopScreenShare] master => doOffer to', remoteId)
           await enqueueNegotiation(remoteId, pc);
         }
