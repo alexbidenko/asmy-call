@@ -326,8 +326,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     if (
       sdpDescription.type === 'offer' &&
-      (negotiationInProgress[from] || pc.signalingState !== 'stable') &&
-      mySocketId.value < from
+      (negotiationInProgress[from] || pc.signalingState !== 'stable')
     ) {
       console.log('[handleSignal] Remote offer skipped from=', from);
       return;
