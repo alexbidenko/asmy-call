@@ -324,13 +324,9 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     const { from, signalData } = payload;
     const sdpDescription = new RTCSessionDescription(signalData.sdp);
 
-    if (
-      sdpDescription.type === 'offer' &&
-      (negotiationInProgress[from] || pc.signalingState !== 'stable') &&
-      mySocketId.value < from
-    ) {
-      console.log('[handleSignal] Remote offer skipped from=', from, '-> triggering renegotiation');
-      await enqueueNegotiation(from, pc); // инициируем самостоятельное обновление
+    // Если это offer и текущий signalingState не stable, то не обрабатывать его
+    if (sdpDescription.type === 'offer' && pc.signalingState !== 'stable') {
+      console.log('[handleSignal] Ignoring offer from', from, 'because signaling state is', pc.signalingState);
       return;
     }
 
