@@ -5,16 +5,18 @@ export const useAudioOutputStore = defineStore('audio_output', () => {
 
   const sources = reactive(new Set<HTMLVideoElement>());
 
-  const setup = (el: HTMLVideoElement) => {
-    el.setSinkId(deviceStore.selectedAudioOutput).catch((error) => {
+  const setup = async (el: HTMLVideoElement) => {
+    try {
+      await el.setSinkId(deviceStore.selectedAudioOutput);
+    } catch (error) {
       console.error('Error setting sinkId:', error)
-    });
+    }
   };
 
-  const register = (el: HTMLVideoElement) => {
+  const register = async (el: HTMLVideoElement) => {
     if (!sources.has(el)) {
       sources.add(el);
-      setup(el);
+      await setup(el);
     }
   };
 
