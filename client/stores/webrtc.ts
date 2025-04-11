@@ -28,7 +28,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // На каждого удалённого: (mic / sysAudio / cam / screen)
   const transceivers = ref<Record<string, RTCPeerConnection>>({})
 
-  const remoteTracks = ref<string[]>([])
   const negotiationInProgress = reactive<Record<string, boolean>>({});
   // Объект для хранения очередей переговоров по каждому remoteId в виде цепочки Promise
   const negotiationQueues = reactive<Record<string, Promise<void>>>({});
@@ -43,7 +42,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     rtcSocket.value?.disconnect();
     remoteStreams.value = [];
     peerConnections.value = {};
-    remoteTracks.value = [];
     transceivers.value = {};
 
     rtcSocket.value = io(config.public.apiHost || '', { forceNew: true })
@@ -138,15 +136,12 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       if (evt.candidate) sendSignal(remoteId, { candidate: evt.candidate.toJSON() });
     }
 
-    pc.ontrack = (evt) => {
-      const track = evt.track;
+    pc.ontrack = (event) => {
+      console.info('Test test:', event);
+      const track = event.track;
       if (!track) return;
-      if (remoteTracks.value.includes(track.id)) {
-        return;
-      }
-      remoteTracks.value.push(track.id);
 
-      evt.streams.forEach((stream) => {
+      event.streams.forEach((stream) => {
         stream.onremovetrack = () => {
           removeRemoteStream(stream, remoteId);
         }
@@ -324,9 +319,12 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     const { from, signalData } = payload;
     const sdpDescription = new RTCSessionDescription(signalData.sdp);
 
-    // Если это offer и текущий signalingState не stable, то не обрабатывать его
-    if (sdpDescription.type === 'offer' && pc.signalingState !== 'stable') {
-      console.log('[handleSignal] Ignoring offer from', from, 'because signaling state is', pc.signalingState);
+    if (
+      sdpDescription.type === 'offer' &&
+      (negotiationInProgress[from] || pc.signalingState !== 'stable') &&
+      mySocketId.value < from
+    ) {
+      console.log('[handleSignal] Remote offer skipped from=', from);
       return;
     }
 
