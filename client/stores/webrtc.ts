@@ -442,35 +442,42 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   }
 
   const updateLocalStream = async () => {
-    if (!localStreamStore.stream) return
+    if (!localStreamStore.stream) return;
 
-    void deviceStore.enumerateDevices()
+    // Обновляем список устройств
+    void deviceStore.enumerateDevices();
 
-    await Promise.allSettled(Object.entries(transceivers.value).map(([remoteId, pc]) => {
-      if (pc.signalingState === 'closed') return;
-
-      return updateLocalStreamForRemote(remoteId, pc);
-    })).then((result) => {
+    // Обновляем стрим для каждого удалённого соединения
+    await Promise.allSettled(
+      Object.entries(transceivers.value).map(async ([remoteId, pc]) => {
+        if (pc.signalingState === 'closed') return;
+        // При наличии нового потока проверяем, можем ли заменить трек
+        await updateLocalStreamForRemote(remoteId, pc);
+      })
+    ).then((result) => {
       const errors = result.filter((el) => el.status === 'rejected');
       if (errors.length) console.error('[updateLocalStream] update stream for remote errors:', errors);
     });
 
-    await Promise.allSettled(Object.entries(transceivers.value).map(([remoteId, pc]) => {
-      if (pc.signalingState === 'closed') return;
-
-      if (mySocketId.value > remoteId) {
-        // я SLAVE, пропускаем
-      } else {
-        // я MASTER => doOffer
-        return updateStreamSdpForRemote(remoteId, pc);
-      }
-    })).then((result) => {
+    // Явно инициируем процесс renegotiation для мастера
+    await Promise.allSettled(
+      Object.entries(transceivers.value).map(async ([remoteId, pc]) => {
+        if (pc.signalingState === 'closed') return;
+        if (mySocketId.value > remoteId) {
+          // Для SLAVE можно не обновлять, если это не требуется
+        } else {
+          // Для мастера инициируем negotiation через очередь
+          await enqueueNegotiation(remoteId, pc);
+        }
+      })
+    ).then((result) => {
       const errors = result.filter((el) => el.status === 'rejected');
       if (errors.length) console.error('[updateLocalStream] update stream sdp for remote errors:', errors);
     });
 
-    await slaveForceOffer()
-  }
+    // Если нужно, можно также инициировать renegotiation для SLAVE-стороны
+    await slaveForceOffer();
+  };
 
   const updateScreenShareForRemote = async (remoteId: string, pc: RTCPeerConnection, screen: MediaStream | null, prev: MediaStream | null) => {
     if (screen) {
