@@ -26,6 +26,8 @@ export const useScreenShareStore = defineStore('screen_share', () => {
     nextTick(() => {
       if (element.value && stream.value) {
         element.value.srcObject = stream.value;
+      } else {
+        console.error('Start local streaming problem, element=', element.value);
       }
     });
   };
