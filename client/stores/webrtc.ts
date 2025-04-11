@@ -134,7 +134,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
 
     pc.ontrack = (event) => {
-      console.info('Test test:', event);
       const track = event.track;
       if (!track) return;
 
@@ -316,6 +315,14 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     const { from, signalData } = payload;
     const sdpDescription = new RTCSessionDescription(signalData.sdp);
 
+    // Если получен ответ (answer) и соединение уже стабильно, скорее всего это дубликат – игнорируем его.
+    if (sdpDescription.type === 'answer' && pc.signalingState === 'stable') {
+      console.warn('[handleSignal] Received answer in stable state from=', from, '. Ignoring duplicate answer.');
+      return;
+    }
+
+    // Если получен offer, но PeerConnection не стабильный и вы являетесь мастером (mySocketId < from),
+    // то пропускаем такой offer, чтобы избежать конфликтов renegotiation.
     if (
       sdpDescription.type === 'offer' &&
       pc.signalingState !== 'stable' &&
@@ -334,6 +341,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       return;
     }
 
+    // Если это offer, генерируем answer
     if (sdpDescription.type === 'offer') {
       console.log('[handleSignal] After setRemoteDescription, state=', pc.signalingState);
       await handleLocalDescription(pc, from);
