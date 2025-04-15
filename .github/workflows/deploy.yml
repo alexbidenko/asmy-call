@@ -107,6 +107,6 @@ jobs:
       - name: Deploy 🚀
         run: |
           env IMAGE_PROJECT="${{ env.IMAGE_PROJECT }}" \
-            docker stack deploy --prune --with-registry-auth -c compose.yaml asmy-call
+            docker stack deploy --prune --with-registry-auth -c compose.yaml intelsy-call
         env:
           DOCKER_HOST: ssh://${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}

@@ -427,7 +427,10 @@ export const useWebrtcStore = defineStore('webrtc', () => {
           await prevVideo.replaceTrack(nextVideo);
         }
       })(),
-    ]);
+    ]).then((result) => {
+      const errors = result.filter((el) => el.status === 'rejected');
+      if (errors.length) console.error('[updateLocalStreamForRemote] update stream for remote=', remoteId, 'errors:', errors);
+    });
   };
 
   const updateStreamSdpForRemote = async (remoteId: string, pc: RTCPeerConnection) => {
