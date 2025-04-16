@@ -1,5 +1,9 @@
 version: '3.8'
 
+configs:
+  turnserver_conf:
+    file: ./turnserver.conf
+
 services:
   entrypoint:
     image: ${IMAGE_PROJECT}/entrypoint:latest
@@ -32,6 +36,27 @@ services:
     image: ${IMAGE_PROJECT}/server:latest
     networks:
       - local
+    deploy:
+      replicas: 1
+      update_config:
+        failure_action: rollback
+        order: start-first
+      restart_policy:
+        condition: on-failure
+
+  coturn:
+    image: coturn/coturn:alpine
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
+      - "49152-50000:49152-50000/udp"
+    configs:
+      - source: turnserver_conf
+        target: /etc/turnserver.conf
+        mode: 0444
+    command: ["-c", "/etc/turnserver.conf"]
     deploy:
       replicas: 1
       update_config:

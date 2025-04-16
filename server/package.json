@@ -12,11 +12,11 @@
     "lint": "eslint \"{src,apps,libs}/**/*.ts\" --fix"
   },
   "dependencies": {
-    "@nestjs/common": "11.0.17",
-    "@nestjs/core": "11.0.17",
-    "@nestjs/platform-fastify": "11.0.17",
-    "@nestjs/platform-socket.io": "11.0.17",
-    "@nestjs/websockets": "11.0.17",
+    "@nestjs/common": "11.0.20",
+    "@nestjs/core": "11.0.20",
+    "@nestjs/platform-fastify": "11.0.20",
+    "@nestjs/platform-socket.io": "11.0.20",
+    "@nestjs/websockets": "11.0.20",
     "fastify": "5.3.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
