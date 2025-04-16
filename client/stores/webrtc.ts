@@ -124,7 +124,14 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     if (peerConnections.value[remoteId]) return peerConnections.value[remoteId];
 
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      iceServers: [
+        ...(!localStorage.STUN_DISABLED ? [{ urls: 'stun:stun.l.google.com:19302' }] : []),
+        ...(!localStorage.TURN_DISABLED ? [{
+          urls: 'turn:turn.lab.intelsy.pro:3478',
+          username: 'username',
+          credential: 'password',
+        }] : []),
+      ],
     });
 
     transceivers.value[remoteId] = pc;
