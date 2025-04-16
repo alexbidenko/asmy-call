@@ -13,9 +13,11 @@ const micMenu = ref()
 const audioMenu = ref()
 const videoMenu = ref()
 
+const share = useSimpleShare();
+
 // Списки устройств (микрофоны, колонки, камеры)
 const micItems = computed<MenuItem[]>(() =>
-  deviceStore.audioInputs.map((dev) => ({
+  deviceStore.audioInputs.filter((el) => el.deviceId).map((dev) => ({
     label: dev.label,
     command: () => {
       deviceStore.selectedAudioInput = dev.deviceId
@@ -25,7 +27,7 @@ const micItems = computed<MenuItem[]>(() =>
 );
 
 const audioItems = computed<MenuItem[]>(() =>
-  deviceStore.audioOutputs.map((dev) => ({
+  deviceStore.audioOutputs.filter((el) => el.deviceId).map((dev) => ({
     label: dev.label,
     command: () => {
       deviceStore.selectedAudioOutput = dev.deviceId
@@ -35,7 +37,7 @@ const audioItems = computed<MenuItem[]>(() =>
 );
 
 const videoItems = computed<MenuItem[]>(() =>
-  deviceStore.videoInputs.map((dev) => ({
+  deviceStore.videoInputs.filter((el) => el.deviceId).map((dev) => ({
     label: dev.label,
     command: () => {
       deviceStore.selectedVideoInput = dev.deviceId
@@ -43,6 +45,18 @@ const videoItems = computed<MenuItem[]>(() =>
     class: deviceStore.selectedVideoInput === dev.deviceId ? 'border-l border-l-2 border-l-primary ml-[-2px]' : '',
   }))
 );
+
+const inviteMember = () => {
+  share({
+    title: 'Присоединиться к Asmy Call',
+    url: location.href,
+  });
+};
+
+const onWheel = (event: WheelEvent) => {
+  const element = <HTMLElement>event.currentTarget;
+  element.scrollTo({ left: element.scrollLeft + event.deltaY, behavior: 'smooth' });
+};
 
 const exit = async () => {
   await router.push('/');
@@ -52,7 +66,7 @@ const exit = async () => {
 </script>
 
 <template>
-  <div class="bg-surface-100 dark:bg-surface-800 overflow-auto h-control">
+  <ScrollPanel class="bg-surface-100 dark:bg-surface-800 overflow-auto h-control" :pt="{ barX: 'hidden', content: { onWheel, class: '!p-0 !w-full !h-full' } }">
     <div class="flex justify-center gap-2 py-2 px-4 w-fit mx-auto">
       <!-- Микрофон -->
       <div class="flex gap-1 p-1 bg-primary-600 rounded-full">
@@ -108,7 +122,7 @@ const exit = async () => {
         </Button>
       </div>
 
-      <div class="flex gap-1 p-1 rounded-full" :class="screenShareStore.enabled ? 'bg-primary-600' : 'bg-primary-400'">
+      <div v-if="screenShareStore.supported" class="flex gap-1 p-1 rounded-full" :class="screenShareStore.enabled ? 'bg-primary-600' : 'bg-primary-400'">
         <Button @click="screenShareStore.start" rounded>
           <template #icon>
             <span class="material-icons-outlined">
@@ -147,6 +161,16 @@ const exit = async () => {
       </div>
 
       <div class="flex gap-1 p-1 rounded-full bg-primary-400">
+        <Button @click="inviteMember" rounded>
+          <template #icon>
+            <span class="material-icons-outlined">
+              person_add
+            </span>
+          </template>
+        </Button>
+      </div>
+
+      <div class="flex gap-1 p-1 rounded-full bg-primary-400">
         <Button @click="interfaceStore.isSettingDialogVisible = true" rounded>
           <template #icon>
             <span class="material-icons-outlined">
@@ -166,5 +190,5 @@ const exit = async () => {
         </Button>
       </div>
     </div>
-  </div>
+  </ScrollPanel>
 </template>

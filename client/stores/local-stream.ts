@@ -1,5 +1,6 @@
 export const useLocalStreamStore = defineStore('local_stream', () => {
   const deviceStore = useDeviceStore();
+  const toast = useToast();
 
   const stream = ref<MediaStream | null>(null);
   const audio = ref(false);
@@ -54,6 +55,15 @@ export const useLocalStreamStore = defineStore('local_stream', () => {
 
     if (!enabled) {
       constraints.video = 'none';
+      return;
+    }
+
+    const result = await deviceStore.ensurePermissions();
+    if (!result) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Вы должны дать доступ к камере, чтобы продолжить'
+      });
       return;
     }
 

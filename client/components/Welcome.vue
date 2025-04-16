@@ -16,10 +16,9 @@ const userStore = useUserStore();
 const username = ref(userStore.username);
 
 const onSubmit = async () => {
-  userStore.username = username.value.trim();
-  userStore.initialized = true;
-
   await userStore.initialize();
+
+  userStore.username = username.value.trim();
 
   if (userStore.initialized && !route.params.room) {
     const randomRoom = crypto.randomUUID();

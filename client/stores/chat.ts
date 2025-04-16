@@ -10,30 +10,24 @@ export const useChatStore = defineStore('chat', () => {
   const interfaceStore = useInterfaceStore();
   const roomStore = useRoomStore();
   const toast = useToast();
+  const wsStore = useWsStore();
 
-  // state
-  const socket = ref<Socket | null>(null)
-  const messages = ref<ChatMessage[]>([])
+  const messages = ref<ChatMessage[]>([]);
 
   // actions
   const initChat = () => {
-    const config = useRuntimeConfig()
-
-    socket.value?.disconnect();
-
     messages.value = []
-    socket.value = io(config.public.apiHost || '', { forceNew: true })
 
-    socket.value.on('connect', () => {
-      socket.value?.emit('joinRoom', { room: roomStore.room })
+    wsStore.socket.on('connect', () => {
+      wsStore.socket.emit('joinRoom', { room: roomStore.room })
     })
-    socket.value.on('roomHistory', (history: ChatMessage[]) => {
+    wsStore.socket.on('roomHistory', (history: ChatMessage[]) => {
       messages.value = history
     })
-    socket.value.on('newMessage', (msg: ChatMessage) => {
+    wsStore.socket.on('newMessage', (msg: ChatMessage) => {
       messages.value.push(msg);
 
-      if (!interfaceStore.isChatVisible && msg.socketId !== socket.value?.id) {
+      if (!interfaceStore.isChatVisible && msg.socketId !== wsStore.socket.id) {
         toast.add({
           group: 'message',
           severity: 'secondary',
@@ -49,20 +43,15 @@ export const useChatStore = defineStore('chat', () => {
     const userStore = useUserStore()
 
     if (!text.trim()) return
-    socket.value?.emit('sendMessage', {
+    wsStore.socket?.emit('sendMessage', {
       room: roomStore.room,
       name: userStore.username,
       text
     })
   }
 
-  onBeforeUnmount(() => {
-    socket.value?.disconnect()
-  });
-
   // expose
   return {
-    socket,
     messages,
 
     initChat,

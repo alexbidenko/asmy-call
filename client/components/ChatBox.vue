@@ -1,5 +1,6 @@
 <script setup lang="ts">
-const chatStore = useChatStore()
+const chatStore = useChatStore();
+const wsStore = useWsStore();
 const text = ref('')
 
 const onSend = () => {
@@ -18,7 +19,7 @@ const onSend = () => {
           v-for="(msg, i) in chatStore.messages"
           :key="i"
           :message="msg"
-          :class="{ 'ml-auto': msg.socketId === chatStore.socket?.id }"
+          :class="{ 'ml-auto': msg.socketId === wsStore.socket.id }"
         />
       </div>
     </div>
@@ -28,7 +29,7 @@ const onSend = () => {
       <Textarea
         v-model.trim="text"
         @keydown.ctrl.enter="onSend"
-        placeholder="Сообщение..."
+        placeholder="Сообщение... (Ctrl+Enter)"
         rows="1"
         auto-resize
         class="max-h-48 flex-1 !border-none"

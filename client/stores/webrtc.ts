@@ -1,5 +1,3 @@
-import { type Socket, io } from 'socket.io-client'
-
 export type RemoteStreamObj = {
   id: string;
   socketId: string;
@@ -13,11 +11,11 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const memberStore = useMemberStore();
   const senderStore = useSenderStore();
   const roomStore = useRoomStore();
+  const wsStore = useWsStore();
 
   // -------------------
   // State (Composition API refs)
   // -------------------
-  const rtcSocket = ref<Socket | null>(null)
   const mySocketId = ref('')
   const remoteStreams = ref<RemoteStreamObj[]>([])
   const peerConnections = ref<Record<string, RTCPeerConnection>>({})
@@ -36,30 +34,21 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // initSocket, joinWebrtcRoom
   // --------------------------------------------------
   const initSocket = () => {
-    const config = useRuntimeConfig()
-
-    rtcSocket.value?.disconnect();
-    remoteStreams.value = [];
-    peerConnections.value = {};
-    transceivers.value = {};
-
-    rtcSocket.value = io(config.public.apiHost || '', { forceNew: true })
-
-    rtcSocket.value.on('connect', () => {
-      if (rtcSocket.value?.id) {
-        mySocketId.value = rtcSocket.value.id
+    wsStore.socket.on('connect', () => {
+      if (wsStore.socket.id) {
+        mySocketId.value = wsStore.socket.id
         console.log('[WebRTC] mySocketId=', mySocketId.value)
       }
     })
 
-    rtcSocket.value.on('existingUsers', (users: { socketId: string; username: string }[]) => {
+    wsStore.socket.on('existingUsers', (users: { socketId: string; username: string }[]) => {
       users.forEach((u) => {
         createPeerConnection(u.socketId)
         memberStore.join({ id: u.socketId, username: u.username })
       })
     })
 
-    rtcSocket.value.on('user-joined', async (data) => {
+    wsStore.socket.on('user-joined', async (data) => {
       const pc = createPeerConnection(data.socketId);
       memberStore.join({ id: data.socketId, username: data.username });
 
@@ -74,11 +63,11 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       }
     })
 
-    rtcSocket.value.on('webrtcSignal', (payload) => {
+    wsStore.socket.on('webrtcSignal', (payload) => {
       handleSignal(payload);
     });
 
-    rtcSocket.value.on('user-left', (data) => {
+    wsStore.socket.on('user-left', (data) => {
       if (peerConnections.value[data.socketId]) {
         peerConnections.value[data.socketId].close();
         delete peerConnections.value[data.socketId];
@@ -94,14 +83,14 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
   const joinWebrtcRoom = () => {
     const userStore = useUserStore()
-    rtcSocket.value?.emit('joinWebrtcRoom', {
+    wsStore.socket.emit('joinWebrtcRoom', {
       room: roomStore.room,
       username: userStore.username
     });
   }
 
   const sendSignal = (remoteId: string, data: any) => {
-    rtcSocket.value?.emit('webrtcSignal', {
+    wsStore.socket.emit('webrtcSignal', {
       room: roomStore.room,
       from: mySocketId.value,
       to: remoteId,
@@ -127,6 +116,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       iceServers: [
         ...(!localStorage.STUN_DISABLED ? [{ urls: 'stun:stun.l.google.com:19302' }] : []),
         ...(!localStorage.TURN_DISABLED ? [{
+          // TODO: сделать бы доступ по TLS защищенно
           urls: 'turn:turn.lab.intelsy.pro:3478',
           username: 'username',
           credential: 'password',
@@ -452,9 +442,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   const updateLocalStream = async () => {
     if (!localStreamStore.stream) return;
 
-    // Обновляем список устройств
-    void deviceStore.enumerateDevices();
-
     // Обновляем стрим для каждого удалённого соединения
     await Promise.allSettled(
       Object.entries(transceivers.value).map(async ([remoteId, pc]) => {
@@ -487,7 +474,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     await slaveForceOffer();
   };
 
-  const updateScreenShareForRemote = async (remoteId: string, pc: RTCPeerConnection, screen: MediaStream | null, prev: MediaStream | null) => {
+  const updateScreenShareForRemote = async (remoteId: string, pc: RTCPeerConnection, screen: MediaStream | null | undefined, prev: MediaStream | null | undefined) => {
     if (screen) {
       const sVid = screen.getVideoTracks()[0] || null
       if (sVid) {
@@ -530,7 +517,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
   };
 
-  const updateScreenShare = async (screen: MediaStream | null, prev: MediaStream | null) => {
+  const updateScreenShare = async (screen: MediaStream | null | undefined, prev: MediaStream | null | undefined) => {
     for (const [remoteId, pc] of Object.entries(transceivers.value)) {
       if (pc.signalingState === 'closed') {
         console.log(`[startScreenShare] skip PC ${remoteId}, because signalingState=closed`)
@@ -557,9 +544,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   });
 
   onBeforeUnmount(() => {
-    rtcSocket.value?.disconnect()
-    rtcSocket.value = null
-
     // 2) Закрыть все PeerConnections
     for (const pcObj of Object.values(peerConnections.value)) {
       pcObj.close()
@@ -567,7 +551,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   });
 
   return {
-    rtcSocket,
     remoteStreams,
     localVideo,
 

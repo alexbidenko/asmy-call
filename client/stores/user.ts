@@ -4,32 +4,19 @@ export const useUserStore = defineStore('user', () => {
   const username = ref(localStorage.getItem('username') || '');
   const initialized = ref(false);
 
+  const { ensurePermissions } = useDevicesList({ constraints: { audio: true } });
+
   const ready = computed(() => !!username.value.trim());
 
   const initialize = async () => {
-    const permissionStatus = await navigator.permissions.query({ name: 'microphone' })
+    const result = await ensurePermissions();
 
-    if (permissionStatus.state === 'granted') {
-      // Уже дано разрешение
-      initialized.value = true
-    } else if (permissionStatus.state === 'denied') {
+    if (result) initialized.value = true;
+    else {
       toast.add({
         severity: 'warn',
         summary: 'Вы должны дать доступ к микрофону, чтобы пользоваться приложением'
-      })
-    } else {
-      // Пробуем запросить доступ к микрофону
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true })
-        // Если пользователь дал разрешение → всё ок
-        initialized.value = true
-      } catch {
-        // Пользователь отменил / отклонил → показываем предупреждение
-        toast.add({
-          severity: 'warn',
-          summary: 'Вы должны дать доступ к микрофону, чтобы пользоваться приложением'
-        })
-      }
+      });
     }
   };
 

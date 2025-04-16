@@ -7,6 +7,7 @@ export const useRoomStore = defineStore('room', () => {
   const chatStore = useChatStore();
   const localStreamStore = useLocalStreamStore();
   const senderStore = useSenderStore();
+  const wsStore = useWsStore();
 
   const room = computed(() => typeof route.params.room === 'string' ? route.params.room : '');
 
@@ -18,6 +19,7 @@ export const useRoomStore = defineStore('room', () => {
     memberStore.$dispose();
     localStreamStore.$dispose();
     senderStore.$dispose();
+    wsStore.$dispose();
   };
 
   return {

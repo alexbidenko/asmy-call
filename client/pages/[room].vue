@@ -2,6 +2,8 @@
 const userStore = useUserStore();
 const interfaceStore = useInterfaceStore();
 
+const online = useOnline();
+
 definePageMeta({
   validate: (route) => (
     typeof route.params.room === 'string' &&
@@ -14,6 +16,9 @@ definePageMeta({
   <Welcome v-if="!userStore.ready" />
   <div v-else-if="!userStore.initialized" class="h-full flex justify-center items-center">
     <Button @click="userStore.initialize" label="Присоединиться" size="large" text />
+  </div>
+  <div v-else-if="!online" class="h-full flex justify-center items-center">
+    <span class="text-sm">Отсутствие интернет соединения...</span>
   </div>
   <RoomWrapper v-else class="h-full flex flex-col">
     <Splitter

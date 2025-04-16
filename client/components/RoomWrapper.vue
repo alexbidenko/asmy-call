@@ -5,30 +5,25 @@ const chatStore = useChatStore();
 const webrtcStore = useWebrtcStore();
 const localStreamStore = useLocalStreamStore();
 
-const handleDeviceChange = async () => {
-  await deviceStore.enumerateDevices();
-  console.log('[devicechange] Updated list of devices');
-};
+const { isSupported, isActive, request, release } = useWakeLock();
 
 onMounted(async () => {
   // Считываем сохранённые выборы устройств
   deviceStore.loadFromStorage()
-  await deviceStore.enumerateDevices()
 
-  // Инициализируем сокет (если не был) и подключаемся к комнате
-  if (!webrtcStore.rtcSocket) webrtcStore.initSocket()
+  webrtcStore.initSocket()
 
   await localStreamStore.init();
 
   webrtcStore.joinWebrtcRoom();
 
-  if (!chatStore.socket) chatStore.initChat()
+  chatStore.initChat()
 
-  navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+  if (isSupported.value) void request('screen');
 });
 
 onBeforeUnmount(() => {
-  navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+  if (isActive.value) void release();
 
   roomStore.exit();
 });

@@ -40,13 +40,5 @@
     "tsconfig-paths": "4.2.0",
     "typescript": "5.8.3",
     "typescript-eslint": "8.30.1"
-  },
-  "trustedDependencies": [
-    "@nestjs/core"
-  ],
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@nestjs/core"
-    ]
   }
 }
