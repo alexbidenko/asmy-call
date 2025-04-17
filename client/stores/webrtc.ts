@@ -6,7 +6,6 @@ export type RemoteStreamObj = {
 
 export const useWebrtcStore = defineStore('webrtc', () => {
   const screenShareStore = useScreenShareStore();
-  const deviceStore = useDeviceStore();
   const localStreamStore = useLocalStreamStore();
   const memberStore = useMemberStore();
   const senderStore = useSenderStore();
@@ -18,17 +17,20 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // -------------------
   const mySocketId = ref('')
   const remoteStreams = ref<RemoteStreamObj[]>([])
-  const peerConnections = ref<Record<string, RTCPeerConnection>>({})
+  const peerConnections = reactive<Record<string, RTCPeerConnection>>({})
 
   // У нас в UI <video ref="localVideo" />
-  const localVideo = ref<HTMLVideoElement | null>(null)
-
-  // На каждого удалённого: (mic / sysAudio / cam / screen)
-  const transceivers = ref<Record<string, RTCPeerConnection>>({})
+  const localVideo = shallowRef<HTMLVideoElement | null>(null)
 
   // Объект для хранения очередей переговоров по каждому remoteId в виде цепочки Promise
   const negotiationQueues = reactive<Record<string, Promise<void>>>({});
-  const pendingCandidate = ref<RTCIceCandidate[]>([]);
+  const pendingCandidates = reactive<Record<string, RTCIceCandidateInit[]>>({});
+
+  const isNegotiating = reactive<Record<string, boolean>>({});
+  const pendingRenegotiation = reactive<Record<string, boolean>>({});
+
+  const needIceRestart     = reactive<Record<string, boolean>>({});
+  const isIceRestarting    = reactive<Record<string, boolean>>({});
 
   // --------------------------------------------------
   // initSocket, joinWebrtcRoom
@@ -68,9 +70,9 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     });
 
     wsStore.socket.on('user-left', (data) => {
-      if (peerConnections.value[data.socketId]) {
-        peerConnections.value[data.socketId].close();
-        delete peerConnections.value[data.socketId];
+      if (peerConnections[data.socketId]) {
+        peerConnections[data.socketId].close();
+        delete peerConnections[data.socketId];
       }
       remoteStreams.value = remoteStreams.value.filter((r) => r.socketId !== data.socketId);
       memberStore.leave(data.socketId);
@@ -105,26 +107,33 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       console.error(`[cleanupPeerConnection] Ошибка при закрытии соединения с ${remoteId}:`, error);
     }
 
-    delete peerConnections.value[remoteId];
+    delete peerConnections[remoteId];
+    delete isNegotiating[remoteId];
+    delete pendingRenegotiation[remoteId];
+    delete isIceRestarting[remoteId];
+    delete needIceRestart[remoteId];
+    delete pendingCandidates[remoteId];
     remoteStreams.value = remoteStreams.value.filter((r) => r.socketId !== remoteId);
   };
 
   const createPeerConnection = (remoteId: string) => {
-    if (peerConnections.value[remoteId]) return peerConnections.value[remoteId];
+    if (peerConnections[remoteId]) return peerConnections[remoteId];
 
     const pc = new RTCPeerConnection({
       iceServers: [
-        ...(!localStorage.STUN_DISABLED ? [{ urls: 'stun:stun.l.google.com:19302' }] : []),
-        ...(!localStorage.TURN_DISABLED ? [{
-          // TODO: сделать бы доступ по TLS защищенно
-          urls: 'turn:turn.lab.intelsy.pro:3478',
+        { urls: 'stun:stun.l.google.com:19302' },
+        {
+          urls: 'turns:turn.lab.intelsy.pro:443?transport=tcp',
           username: 'username',
           credential: 'password',
-        }] : []),
+        },
       ],
     });
 
-    transceivers.value[remoteId] = pc;
+    isNegotiating[remoteId] = false;
+    pendingRenegotiation[remoteId] = false;
+    isIceRestarting[remoteId] = false;
+    needIceRestart[remoteId]  = false;
 
     pc.onicecandidate = (evt) => {
       if (evt.candidate) sendSignal(remoteId, { candidate: evt.candidate.toJSON() });
@@ -146,6 +155,13 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
 
     pc.onnegotiationneeded = async () => {
+      // ➍ пропускаем ивент, если ещё не завершили предыдущий offer
+      if (isNegotiating[remoteId]) {
+        pendingRenegotiation[remoteId] = true;
+        console.log('[onnegotiationneeded] duplicate ignored for', remoteId);
+        return;
+      }
+
       try {
         await enqueueNegotiation(remoteId, pc);
       } catch (error) {
@@ -154,13 +170,14 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     }
 
     pc.oniceconnectionstatechange = () => {
-      console.log(`[ICE State] ${pc.iceConnectionState} для remoteId=${remoteId}`);
+      console.log(`[ICE State] ${pc.iceConnectionState} remoteId=${remoteId}`);
 
-      if (['failed', 'closed', 'disconnected'].includes(pc.iceConnectionState)) {
-        console.warn(`[ICE State] Состояние '${pc.iceConnectionState}' обнаружено для remoteId=${remoteId}, выполняется очистка.`);
-        cleanupPeerConnection(remoteId, pc);
+      if (pc.iceConnectionState === 'failed') {
+        void attemptIceRestart(remoteId, pc);                 // немедленный рестарт
+      } else if (['closed', 'disconnected'].includes(pc.iceConnectionState)) {
+        cleanupPeerConnection(remoteId, pc);             // как было
       }
-    }
+    };
 
     // Обработчик изменения общего состояния соединения
     pc.onconnectionstatechange = () => {
@@ -182,16 +199,56 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       }
     };
 
+    pc.onicecandidateerror = (evt) => {
+      console.warn('[ICE‑ERR]', evt.address, evt.errorText);
+
+      // маркируем peer: «у него проблемы с host‑кандидатом»
+      // если уже помечен — таймер стоит, выходим
+      if (needIceRestart[remoteId]) return;
+      needIceRestart[remoteId] = true;
+
+      // ставим таймер один раз
+      setTimeout(async () => {
+        if (needIceRestart[remoteId] && pc.iceConnectionState !== 'closed') {
+          console.log('[ICE‑ERR] scheduling ICE‑restart for', remoteId);
+          await attemptIceRestart(remoteId, pc);
+          needIceRestart[remoteId] = false;
+        }
+      }, 3000);
+    };
+
     (async () => {
       await updateLocalStreamForRemote(remoteId, pc);
       await updateScreenShareForRemote(remoteId, pc, screenShareStore.stream, null);
       await updateStreamSdpForRemote(remoteId, pc);
     })();
 
-    peerConnections.value[remoteId] = pc;
+    peerConnections[remoteId] = pc;
 
     return pc
-  }
+  };
+
+  const attemptIceRestart = async (remoteId: string, pc: RTCPeerConnection) => {
+    // Safari ≤ 16 не поддерживает restartIce()
+    if (!pc.restartIce) {
+      console.warn('[ICE‑restart] restartIce() not supported; doing full renegotiation');
+      await enqueueNegotiation(remoteId, pc);          // offer без перезвона
+      return;
+    }
+
+    if (isIceRestarting[remoteId]) return;             // защита от дубля
+    isIceRestarting[remoteId] = true;
+    needIceRestart[remoteId]  = false;                 // сбрасываем «ждущий» флаг
+
+    try {
+      console.log('[ICE‑restart] restarting for', remoteId);
+      pc.restartIce();
+    } catch (err) {
+      console.error('[ICE‑restart] failed for', remoteId, err);
+    } finally {
+      isIceRestarting[remoteId] = false;
+    }
+  };
 
   const pushRemoteStream = (stream: MediaStream, socketId: string) => {
     const found = remoteStreams.value.some(
@@ -253,7 +310,32 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // Если для remoteId уже есть запущенная задача, новая задача будет выполнена после завершения предыдущей.
   const enqueueNegotiation = (remoteId: string, peerConnection: RTCPeerConnection) => {
     // Задача переговорам представлена функцией, которая возвращает Promise
-    const negotiationTask = () => negotiateWithBackoff(remoteId, peerConnection);
+    const negotiationTask = async () => {
+      // ➋ если уже идёт переговор, тихо выходим
+      if (isNegotiating[remoteId]) {
+        pendingRenegotiation[remoteId] = true;
+        console.log('[enqueueNegotiation] skip: already negotiating for', remoteId);
+        return;
+      }
+
+      isNegotiating[remoteId] = true;
+      try {
+        await negotiateWithBackoff(remoteId, peerConnection);
+      } finally {
+        // ➌ переставляем флаг в любом случае
+        isNegotiating[remoteId] = false;
+
+        // ──▶ если за время renegotiation накопился запрос, запускаем ещё один круг
+        if (pendingRenegotiation[remoteId]) {
+          pendingRenegotiation[remoteId] = false;   // сбрасываем флаг
+          console.log('[negotiationTask] running pending renegotiation for', remoteId);
+          // ставим в очередь новый negotiationTask
+          negotiationQueues[remoteId] = negotiationQueues[remoteId]
+            .catch(() => {})
+            .then(() => negotiationTask());
+        }
+      }
+    };
 
     // Если очередь для данного remoteId отсутствует, запускаем задачу сразу
     if (!negotiationQueues[remoteId]) {
@@ -297,24 +379,29 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   };
 
   const handleCandidateSignal = async (pc: RTCPeerConnection, payload: any) => {
-    const { from, signalData } = payload;
+    const { from: remoteId, signalData } = payload;
 
     try {
-      console.log('[handleSignal] candidate from=', from)
-      if (!pc.remoteDescription) pendingCandidate.value.push(signalData.candidate)
-      else await addIceCandidateWithRetry(pc, signalData.candidate);
+      console.log('[handleSignal] candidate from=', remoteId)
+      if (!pc.remoteDescription) {
+        if (!pendingCandidates[remoteId]) pendingCandidates[remoteId] = [];
+        pendingCandidates[remoteId].push(signalData.candidate);
+        return;
+      }
+
+      await addIceCandidateWithRetry(pc, signalData.candidate);
     } catch (error) {
-      console.error('[handleCandidateSignal] add ice candidate failed from=', from, 'remoteDescription=', pc.localDescription, error);
+      console.error('[handleCandidateSignal] add ice candidate failed from=', remoteId, 'remoteDescription=', pc.localDescription, error);
     }
   };
 
   const handleDescriptionSignal = async (pc: RTCPeerConnection, payload: any) => {
-    const { from, signalData } = payload;
+    const { from: remoteId, signalData } = payload;
     const sdpDescription = new RTCSessionDescription(signalData.sdp);
 
     // Если получен ответ (answer) и соединение уже стабильно, скорее всего это дубликат – игнорируем его.
     if (sdpDescription.type === 'answer' && pc.signalingState === 'stable') {
-      console.warn('[handleSignal] Received answer in stable state from=', from, '. Ignoring duplicate answer.');
+      console.warn('[handleSignal] Received answer in stable state from=', remoteId, '. Ignoring duplicate answer.');
       return;
     }
 
@@ -323,13 +410,13 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     if (
       sdpDescription.type === 'offer' &&
       pc.signalingState !== 'stable' &&
-      mySocketId.value < from
+      mySocketId.value < remoteId
     ) {
-      console.log('[handleSignal] Remote offer skipped from=', from);
+      console.log('[handleSignal] Remote offer skipped from=', remoteId);
       return;
     }
 
-    console.log('[handleSignal] SDP received from=', from, 'type=', sdpDescription.type);
+    console.log('[handleSignal] SDP received from=', remoteId, 'type=', sdpDescription.type);
 
     try {
       await pc.setRemoteDescription(sdpDescription);
@@ -341,11 +428,11 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     // Если это offer, генерируем answer
     if (sdpDescription.type === 'offer') {
       console.log('[handleSignal] After setRemoteDescription, state=', pc.signalingState);
-      await handleLocalDescription(pc, from);
+      await handleLocalDescription(pc, remoteId);
     }
 
-    const candidatesToProcess = [...pendingCandidate.value];
-    pendingCandidate.value = [];
+    const candidatesToProcess = pendingCandidates[remoteId] ?? [];
+    delete pendingCandidates[remoteId];
 
     const results = await Promise.allSettled(
       candidatesToProcess.map((candidate) => addIceCandidateWithRetry(pc, candidate))
@@ -359,10 +446,10 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
   const handleSignal = async (payload: any) => {
     const { from, signalData } = payload;
-    if (!peerConnections.value[from]) {
+    if (!peerConnections[from]) {
       createPeerConnection(from)
     }
-    const pc = peerConnections.value[from]
+    const pc = peerConnections[from]
 
     if (signalData.sdp) {
       await handleDescriptionSignal(pc, payload);
@@ -375,7 +462,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // SLAVE: вызвать doOffer, если я хочу отправлять свои треки
   // --------------------------------------------------
   const slaveForceOffer = async () => {
-    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
+    for (const [remoteId, pc] of Object.entries(peerConnections)) {
       if (mySocketId.value > remoteId) {
         if (pc.signalingState === 'stable') {
           console.log('[slaveForceOffer] => doOffer, me=', mySocketId.value, '->', remoteId)
@@ -444,7 +531,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     // Обновляем стрим для каждого удалённого соединения
     await Promise.allSettled(
-      Object.entries(transceivers.value).map(async ([remoteId, pc]) => {
+      Object.entries(peerConnections).map(async ([remoteId, pc]) => {
         if (pc.signalingState === 'closed') return;
         // При наличии нового потока проверяем, можем ли заменить трек
         await updateLocalStreamForRemote(remoteId, pc);
@@ -456,7 +543,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     // Явно инициируем процесс renegotiation для мастера
     await Promise.allSettled(
-      Object.entries(transceivers.value).map(async ([remoteId, pc]) => {
+      Object.entries(peerConnections).map(async ([remoteId, pc]) => {
         if (pc.signalingState === 'closed') return;
         if (mySocketId.value > remoteId) {
           // Для SLAVE можно не обновлять, если это не требуется
@@ -518,7 +605,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   };
 
   const updateScreenShare = async (screen: MediaStream | null | undefined, prev: MediaStream | null | undefined) => {
-    for (const [remoteId, pc] of Object.entries(transceivers.value)) {
+    for (const [remoteId, pc] of Object.entries(peerConnections)) {
       if (pc.signalingState === 'closed') {
         console.log(`[startScreenShare] skip PC ${remoteId}, because signalingState=closed`)
         continue
@@ -545,7 +632,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
   onBeforeUnmount(() => {
     // 2) Закрыть все PeerConnections
-    for (const pcObj of Object.values(peerConnections.value)) {
+    for (const pcObj of Object.values(peerConnections)) {
       pcObj.close()
     }
   });
