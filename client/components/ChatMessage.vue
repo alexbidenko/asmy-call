@@ -1,3 +1,11 @@
+<script lang="ts" setup>
+import type {ChatMessage} from "~/stores/chat";
+
+defineProps<{
+  message: ChatMessage;
+}>();
+</script>
+
 <template>
   <Message
     severity="contrast"
@@ -8,11 +16,3 @@
     <span class="text-xs opacity-60 mt-1 ml-auto block w-fit">{{ message.name }}</span>
   </Message>
 </template>
-
-<script lang="ts" setup>
-import type {ChatMessage} from "~/stores/chat";
-
-defineProps<{
-  message: ChatMessage;
-}>();
-</script>

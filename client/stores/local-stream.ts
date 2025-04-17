@@ -2,7 +2,7 @@ export const useLocalStreamStore = defineStore('local_stream', () => {
   const deviceStore = useDeviceStore();
   const toast = useToast();
 
-  const stream = ref<MediaStream | null>(null);
+  const stream = shallowRef<MediaStream | null>(null);
   const audio = ref(false);
   const video = ref(false);
   const constraints = reactive({

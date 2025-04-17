@@ -1,4 +1,4 @@
-import {io, Socket} from "socket.io-client";
+import { type Socket, io } from "socket.io-client";
 
 export const useWsStore = defineStore('ws', () => {
   const config = useRuntimeConfig();

@@ -114,6 +114,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     delete needIceRestart[remoteId];
     delete pendingCandidates[remoteId];
     remoteStreams.value = remoteStreams.value.filter((r) => r.socketId !== remoteId);
+
+    memberStore.leave(remoteId);
   };
 
   const createPeerConnection = (remoteId: string) => {
@@ -183,6 +185,13 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     pc.onconnectionstatechange = () => {
       console.log(`[Connection State] ${pc.connectionState} для remoteId=${remoteId}`);
 
+      if (pc.connectionState === 'disconnected') {
+        setTimeout(() => {
+          if (pc.connectionState === 'disconnected') cleanupPeerConnection(remoteId, pc);
+        }, 3000);
+        return;
+      }
+
       if (['failed', 'closed'].includes(pc.connectionState)) {
         console.warn(`[Connection State] Состояние '${pc.connectionState}' обнаружено для remoteId=${remoteId}, выполняется очистка.`);
         cleanupPeerConnection(remoteId, pc);
@@ -199,8 +208,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       }
     };
 
-    pc.onicecandidateerror = (evt) => {
-      console.warn('[ICE‑ERR]', evt.address, evt.errorText);
+    pc.onicecandidateerror = (event) => {
+      console.warn('[onicecandidateerror] event:', event);
 
       // маркируем peer: «у него проблемы с host‑кандидатом»
       // если уже помечен — таймер стоит, выходим
@@ -210,7 +219,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       // ставим таймер один раз
       setTimeout(async () => {
         if (needIceRestart[remoteId] && pc.iceConnectionState !== 'closed') {
-          console.log('[ICE‑ERR] scheduling ICE‑restart for', remoteId);
+          console.log('[onicecandidateerror] scheduling ICE‑restart for', remoteId);
           await attemptIceRestart(remoteId, pc);
           needIceRestart[remoteId] = false;
         }
@@ -243,8 +252,8 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     try {
       console.log('[ICE‑restart] restarting for', remoteId);
       pc.restartIce();
-    } catch (err) {
-      console.error('[ICE‑restart] failed for', remoteId, err);
+    } catch (error) {
+      console.error('[ICE‑restart] failed for', remoteId, error);
     } finally {
       isIceRestarting[remoteId] = false;
     }
@@ -279,31 +288,15 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   };
 
   // Функция для выполнения переговоров с экспоненциальным backoff.
-  // Если попытка неудачна, происходит повторный вызов с задержкой,
-  // вычисляемой как min(baseDelay * 2^(attempts - 1), maxDelay).
+  // Если попытка неудачна, происходит повторный вызов с задержкой
   const negotiateWithBackoff = async (
     remoteId: string,
     peerConnection: RTCPeerConnection,
-    maxAttempts = 5,
-    baseDelay = 500, // базовая задержка в миллисекундах
-    maxDelay = 5000, // максимальная задержка в миллисекундах
   ) => {
-    let attempts = 0;
-    while (attempts < maxAttempts) {
-      try {
-        // Попытка установить локальное описание и отправить его через сигналинг
-        await handleLocalDescription(peerConnection, remoteId);
-        console.log(`[negotiateWithBackoff] Negotiation succeeded for remoteId=${remoteId} on attempt ${attempts + 1}`);
-        return;
-      } catch (error) {
-        attempts++;
-        // Вычисляем задержку с экспоненциальным backoff, но с ограничением по maxDelay
-        const delay = Math.min(baseDelay * Math.pow(2, attempts - 1), maxDelay);
-        console.warn(`[negotiateWithBackoff] Attempt ${attempts} failed for remoteId=${remoteId}. Retrying in ${delay} ms`, error);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-    console.error(`[negotiateWithBackoff] Negotiation failed after ${maxAttempts} attempts for remoteId=${remoteId}`);
+    // TODO: надо как-то правильно обрабатывать ошибки
+    await retry(() => handleLocalDescription(peerConnection, remoteId), { exponential: true, delay: 500 }).catch((error) => {
+      console.error(`[negotiateWithBackoff] Negotiation failed after some attempts for remoteId=${remoteId}:`, error);
+    });
   };
 
   // Функция для добавления переговорной задачи в очередь для заданного remoteId.
@@ -351,31 +344,14 @@ export const useWebrtcStore = defineStore('webrtc', () => {
     return negotiationQueues[remoteId];
   };
 
-  const addIceCandidateWithRetry = async (
-    pc: RTCPeerConnection,
-    candidate: RTCIceCandidateInit,
-    maxAttempts = 5,
-    baseDelay = 1000
-  ) => {
-    let attempts = 0;
-    while (attempts < maxAttempts) {
-      try {
-        await pc.addIceCandidate(candidate);
-        console.log(`[addIceCandidateWithRetry] Кандидат успешно добавлен на попытке ${attempts + 1}`);
-        return;
-      } catch (error) {
-        attempts++;
-        console.warn(
-          `[addIceCandidateWithRetry] Ошибка добавления кандидата, попытка ${attempts}:`,
-          error
-        );
-        // Экспоненциальная задержка
-        await new Promise((resolve) => setTimeout(resolve, baseDelay * attempts));
-      }
-    }
-    console.error(
-      `[addIceCandidateWithRetry] Не удалось добавить кандидата после ${maxAttempts} попыток`
-    );
+  const addIceCandidateWithRetry = async (pc: RTCPeerConnection, candidate: RTCIceCandidateInit) => {
+    // TODO: надо как-то правильно обрабатывать ошибки
+    await retry(() => pc.addIceCandidate(candidate)).catch((error) => {
+      console.error(
+        '[addIceCandidateWithRetry] Не удалось добавить кандидата после множества попыток:',
+        error,
+      );
+    });
   };
 
   const handleCandidateSignal = async (pc: RTCPeerConnection, payload: any) => {

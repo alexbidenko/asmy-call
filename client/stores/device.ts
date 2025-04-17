@@ -1,7 +1,7 @@
 export const useDeviceStore = defineStore('device', () => {
-  const selectedAudioInput = ref('default')
-  const selectedAudioOutput = ref('default')
-  const selectedVideoInput = ref('default')
+  const selectedAudioInput = ref('default');
+  const selectedAudioOutput = ref('default');
+  const selectedVideoInput = ref('default');
 
   const {
     videoInputs,

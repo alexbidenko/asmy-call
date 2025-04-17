@@ -25,6 +25,8 @@
     "curly": "off",
     "no-ternary": "off",
     "no-anonymous-default-export": "off",
-    "exports-last": "off"
+    "exports-last": "off",
+    "group-exports": "off",
+    "max-params": "off"
   }
 }

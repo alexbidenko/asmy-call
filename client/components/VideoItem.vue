@@ -108,8 +108,8 @@ const localVideoEl = ref<HTMLVideoElement|null>(null)
 
 // Юзер вам передаёт prop: videoRef – колбэк.
 // Вы можете в нём также сохранить себе локально ссылку.
-const videoRefLocal = (el: HTMLVideoElement) => {
-  if (el === localVideoEl.value) return;
+const videoRefLocal = (el?: HTMLVideoElement) => {
+  if (!el || el === localVideoEl.value) return;
 
   props.videoRef(el)  // чтобы внешний код тоже работал
   localVideoEl.value = el
@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
         v-show="videoEnabled"
         as="video"
         layout
-        :ref="(el) => videoRefLocal(el.$el as HTMLVideoElement)"
+        :ref="(el) => videoRefLocal(el?.$el as HTMLVideoElement)"
         autoplay
         :data-open="opened"
         playsinline
