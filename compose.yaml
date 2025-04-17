@@ -52,6 +52,8 @@ services:
       - "5349:5349"
       - "5349:5349/udp"
       - "49152-50000:49152-50000/udp"
+    networks:
+      - server
     configs:
       - source: turnserver_conf
         target: /etc/turnserver.conf
