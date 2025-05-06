@@ -58,7 +58,7 @@ services:
     configs:
       - source: turnserver_conf
         target: /etc/turnserver.conf
-        mode: 0444
+#        mode: 0444
     command: ["-c", "/etc/turnserver.conf"]
     deploy:
       replicas: 1
