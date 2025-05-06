@@ -125,7 +125,7 @@ export const useWebrtcStore = defineStore('webrtc', () => {
 
     const pc = new RTCPeerConnection({
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
+        // { urls: 'stun:stun.l.google.com:19302' },
         {
           urls: 'turns:turn.lab.intelsy.pro:443?transport=tcp',
           username: 'username',
