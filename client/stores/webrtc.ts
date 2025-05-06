@@ -6,6 +6,9 @@ export type RemoteStreamObj = {
 
 type RemoteId = string;
 
+const TURN_SERVER_HOST = 'turn.lab.intelsy.pro';
+const TURN_SERVER_IP = '62.109.28.203';
+
 export const useWebrtcStore = defineStore('webrtc', () => {
   const screenShareStore = useScreenShareStore();
   const localStreamStore = useLocalStreamStore();
@@ -127,7 +130,12 @@ export const useWebrtcStore = defineStore('webrtc', () => {
       iceServers: [
         // { urls: 'stun:stun.l.google.com:19302' },
         {
-          urls: 'turns:turn.lab.intelsy.pro:443?transport=tcp',
+          urls: [
+            `turns:${TURN_SERVER_HOST}:443?transport=tcp`,
+            `turns:${TURN_SERVER_HOST}:443?transport=udp`,
+            `turn:${TURN_SERVER_IP}:3478?transport=tcp`,
+            `turn:${TURN_SERVER_IP}:3478?transport=udp`,
+          ],
           username: 'username',
           credential: 'password',
         },
