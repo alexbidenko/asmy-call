@@ -4,6 +4,8 @@ export type RemoteStreamObj = {
   stream: MediaStream;
 };
 
+type RemoteId = string;
+
 export const useWebrtcStore = defineStore('webrtc', () => {
   const screenShareStore = useScreenShareStore();
   const localStreamStore = useLocalStreamStore();
@@ -17,20 +19,20 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   // -------------------
   const mySocketId = ref('')
   const remoteStreams = ref<RemoteStreamObj[]>([])
-  const peerConnections = reactive<Record<string, RTCPeerConnection>>({})
+  const peerConnections = reactive<Record<RemoteId, RTCPeerConnection>>({});
 
   // У нас в UI <video ref="localVideo" />
   const localVideo = shallowRef<HTMLVideoElement | null>(null)
 
   // Объект для хранения очередей переговоров по каждому remoteId в виде цепочки Promise
-  const negotiationQueues = reactive<Record<string, Promise<void>>>({});
-  const pendingCandidates = reactive<Record<string, RTCIceCandidateInit[]>>({});
+  const negotiationQueues = reactive<Record<RemoteId, Promise<void>>>({});
+  const pendingCandidates = reactive<Record<RemoteId, RTCIceCandidateInit[]>>({});
 
-  const isNegotiating = reactive<Record<string, boolean>>({});
-  const pendingRenegotiation = reactive<Record<string, boolean>>({});
+  const isNegotiating = reactive<Record<RemoteId, boolean>>({});
+  const pendingRenegotiation = reactive<Record<RemoteId, boolean>>({});
 
-  const needIceRestart     = reactive<Record<string, boolean>>({});
-  const isIceRestarting    = reactive<Record<string, boolean>>({});
+  const needIceRestart     = reactive<Record<RemoteId, boolean>>({});
+  const isIceRestarting    = reactive<Record<RemoteId, boolean>>({});
 
   // --------------------------------------------------
   // initSocket, joinWebrtcRoom

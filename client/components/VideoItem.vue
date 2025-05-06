@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
         v-show="videoEnabled"
         as="video"
         layout
-        :ref="(el) => videoRefLocal(el?.$el as HTMLVideoElement)"
+        :ref="(el) => videoRefLocal((el as ComponentPublicInstance)?.$el as HTMLVideoElement)"
         autoplay
         :data-open="opened"
         playsinline
