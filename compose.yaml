@@ -46,14 +46,15 @@ services:
 
   coturn:
     image: coturn/coturn:alpine
-    ports:
-      - "3478:3478"
-      - "3478:3478/udp"
-      - "5349:5349"
-      - "5349:5349/udp"
-      - "49152-65535:49152-65535/udp"
-    networks:
-      - server
+#    ports:
+#      - "3478:3478"
+#      - "3478:3478/udp"
+#      - "5349:5349"
+#      - "5349:5349/udp"
+#      - "49152-65535:49152-65535/udp"
+#    networks:
+#      - server
+    network_mode: host
     configs:
       - source: turnserver_conf
         target: /etc/turnserver.conf
