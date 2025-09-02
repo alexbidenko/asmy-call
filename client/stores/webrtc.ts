@@ -248,13 +248,6 @@ export const useWebrtcStore = defineStore('webrtc', () => {
   };
 
   const attemptIceRestart = async (remoteId: string, pc: RTCPeerConnection) => {
-    // Safari ≤ 16 не поддерживает restartIce()
-    if (!pc.restartIce) {
-      console.warn('[ICE‑restart] restartIce() not supported; doing full renegotiation');
-      await enqueueNegotiation(remoteId, pc);          // offer без перезвона
-      return;
-    }
-
     if (isIceRestarting[remoteId]) return;             // защита от дубля
     isIceRestarting[remoteId] = true;
     needIceRestart[remoteId]  = false;                 // сбрасываем «ждущий» флаг
